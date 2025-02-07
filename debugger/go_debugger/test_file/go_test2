@@ -1,0 +1,42 @@
+package main
+
+import (
+    "fmt"
+)
+
+
+type MyStruct struct {
+    Field1 int
+    Field2 string
+}
+
+func main() {
+    // 整数变量
+    var intVar int = 42
+    // 字符串变量
+    var stringVar string = "Hello, World!"
+    // 数组变量
+    arrayVar := [3]int{1, 2, 3}
+    // 结构体变量
+    var structVar MyStruct = MyStruct{Field1: 10, Field2: "Struct Value"}
+    // 整数指针变量
+    var intPtr *int = &intVar
+    // 字符串指针变量
+    var stringPtr *string = &stringVar
+    // 结构体指针变量
+    var structPtr *MyStruct = &structVar
+    // 切片变量
+    sliceVar := []int{4, 5, 6}
+    // map 变量
+    var mapVar map[string]int = map[string]int{"one": 1, "two": 2}
+
+    fmt.Printf("%v\n", intVar)
+    fmt.Printf("%v\n", stringVar)
+    fmt.Printf("%v\n", arrayVar)
+    fmt.Printf("%v\n", structVar)
+    fmt.Printf("%v\n", intPtr)
+    fmt.Printf("%v\n", stringPtr)
+    fmt.Printf("%v\n", structPtr)
+    fmt.Printf("%v\n", sliceVar)
+    fmt.Printf("%v\n", mapVar)
+}

@@ -1,0 +1,15 @@
+package main
+import "fmt"
+// 用于测试go的调试功能
+func main() {
+	a, b := 1, 2
+	fmt.Scanf("%d", &a)
+	c := sum(a, b)
+	fmt.Printf("a + b = %d", c)
+	return
+}
+
+func sum(a, b int) int {
+	c := a + b
+	return c
+}

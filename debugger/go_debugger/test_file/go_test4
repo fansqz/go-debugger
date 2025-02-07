@@ -1,0 +1,24 @@
+package main
+
+import "fmt"
+
+func findMinMax(arr []int) (int, int) {
+    min := arr[0]
+    max := arr[0]
+    for _, v := range arr {
+        if v > max {
+            max = v
+        }
+        if v < min {
+            min = v
+        }
+    }
+    return min, max
+}
+
+func main() {
+    arr := []int{3, 1, 56, 33, 12, 9, 42, 88, 27}
+    min, max := findMinMax(arr)
+    fmt.Printf("Minimum element in array: %d\n", min)
+    fmt.Printf("Maximum element in array: %d\n", max)
+}
