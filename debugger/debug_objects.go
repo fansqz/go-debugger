@@ -9,15 +9,6 @@ import (
 type StartOption struct {
 	// CompileTimeout 编译超时
 	CompileTimeout time.Duration
-	// OptionTimeout 操作超时，调试器经常需要和编辑器通信，在OptionLimitTime的时间之内没有响应就取消等待
-	OptionTimeout time.Duration
-	// DebugTimeout 调试超时时间，如果调试器经过DebugTimeout没有返回信息，那么可以认为调试器超时，将调试终止
-	// 可能是因为用户写的程序有死循环，也可能是因为用户太久没有进行操作。
-	DebugTimeout time.Duration
-	// MemoryLimit 内存限制
-	MemoryLimit int64
-	// CPUQuota cpu配额
-	CPUQuota int64
 
 	// CompileFiles 需要编译的文件
 	CompileFiles []string

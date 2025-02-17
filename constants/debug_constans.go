@@ -9,25 +9,29 @@ const (
 )
 
 // DebugOptionType 调试请求操作类型
-type DebugOptionType string
+type RequestType string
 
 const (
 	// StartDebug 开始调试过程，返回可能出现的错误。
-	StartDebug DebugOptionType = "start"
+	StartDebug RequestType = "start"
 	// SendToConsole 输入数据到控制台，返回可能出现的错误。
-	SendToConsole DebugOptionType = "sendToConsole"
-	// Next 执行下一步操作，但不会进入函数内部，返回可能出现的错误。
-	Next DebugOptionType = "next"
-	// Step 执行下一步操作，会进入函数内部（如有调用函数，则步入函数），返回可能出现的错误。
-	Step DebugOptionType = "step"
+	SendToConsole RequestType = "sendToConsole"
+	// Step 单布调试
+	Step RequestType = "step"
 	// Continue：继续执行程序，直到遇到下一个断点或程序结束，返回可能出现的错误。
-	Continue DebugOptionType = "continue"
+	Continue RequestType = "continue"
 	// AddBreakpoints 添加断点，接受文件源和断点列表，返回添加成功的断点和可能出现的错误。
-	AddBreakpoints DebugOptionType = "addBreakpoints"
+	AddBreakpoints RequestType = "addBreakpoints"
 	// RemoveBreakpoints 移除断点，接受文件源和断点列表，返回移除成功的断点和可能出现的错误。
-	RemoveBreakpoints DebugOptionType = "removeBreakpoints"
+	RemoveBreakpoints RequestType = "removeBreakpoints"
 	// Terminate 终止当前的调试会话，之后可以重新调用 Launch 方法开始新的会话，返回可能出现的错误。
-	Terminate DebugOptionType = "terminate"
+	Terminate RequestType = "terminate"
+	// StackTrace 获取栈帧
+	StackTrace RequestType = "stackTrace"
+	// FrameVariables 根据栈帧id获取变量列表
+	FrameVariables RequestType = "frameVariables"
+	// Variables
+	Variables RequestType = "variables"
 )
 
 type DebugEventType string
