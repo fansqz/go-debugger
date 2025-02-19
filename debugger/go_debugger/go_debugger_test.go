@@ -2,14 +2,12 @@ package go_debugger
 
 import (
 	"context"
-	"go-debugger/constants"
-	"go-debugger/debugger"
-	"go-debugger/utils"
+	"github.com/fansqz/go-debugger/constants"
+	"github.com/fansqz/go-debugger/debugger"
+	"github.com/fansqz/go-debugger/utils"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
-	"time"
-
-	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -25,7 +23,6 @@ func testGoDebugger_Run(t *testing.T) {
 		CompileFiles: saveUserCode(t, "./test_file/go_test1", executePath),
 		BreakPoints:  []*debugger.Breakpoint{{"/main.go", 7}},
 		Callback:     func(data interface{}) { cha <- data },
-		DebugTimeout: 10 * 60 * time.Second,
 	})
 	assert.Nil(t, err)
 	// 程序启动

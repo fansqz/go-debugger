@@ -2,10 +2,10 @@ package go_debugger
 
 import (
 	"context"
+	"github.com/fansqz/go-debugger/constants"
+	"github.com/fansqz/go-debugger/debugger"
 	"github.com/maxatome/go-testdeep/td"
 	"github.com/stretchr/testify/assert"
-	"go-debugger/constants"
-	"go-debugger/debugger"
 	"os"
 	"testing"
 )

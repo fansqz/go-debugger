@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	mapset "github.com/deckarep/golang-set"
+	. "github.com/fansqz/go-debugger/debugger"
+	"github.com/fansqz/go-debugger/utils"
 	"github.com/sirupsen/logrus"
-	. "go-debugger/debugger"
-	"go-debugger/utils"
 	"log"
 	"regexp"
 )

@@ -3,8 +3,8 @@ package c_debugger
 import (
 	"fmt"
 	mapset "github.com/deckarep/golang-set"
+	. "github.com/fansqz/go-debugger/debugger"
 	"github.com/sirupsen/logrus"
-	. "go-debugger/debugger"
 	"log"
 )
 

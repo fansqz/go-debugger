@@ -2,8 +2,8 @@ package c_debugger
 
 import (
 	"fmt"
-	"go-debugger/constants"
-	"go-debugger/debugger"
+	"github.com/fansqz/go-debugger/constants"
+	"github.com/fansqz/go-debugger/debugger"
 	"regexp"
 	"strconv"
 	"strings"

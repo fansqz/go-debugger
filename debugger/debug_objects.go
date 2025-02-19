@@ -1,7 +1,7 @@
 package debugger
 
 import (
-	"go-debugger/constants"
+	"github.com/fansqz/go-debugger/constants"
 	"time"
 )
 
