@@ -1,4 +1,4 @@
-module go-debugger
+module github.com/fansqz/go-debugger
 
 go 1.23.2
 
