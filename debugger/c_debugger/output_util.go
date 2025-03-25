@@ -3,7 +3,8 @@ package c_debugger
 import (
 	"fmt"
 	"github.com/fansqz/go-debugger/constants"
-	"github.com/fansqz/go-debugger/debugger"
+	"github.com/google/go-dap"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,21 +13,12 @@ import (
 
 // GDBOutputUtil 处理gdb输出的工具
 type GDBOutputUtil struct {
-	workPath string
 	// 保证map的线程安全
 	lock sync.RWMutex
-	// dap中没有断点编号，但是gdb却有，该映射是number:(file:line)的映射
-	breakpointMap map[string]string
-	// dap中没有断点编号，但是gdb却有，该映射是(file:line):number的映射
-	breakpointInverseMap map[string]string
 }
 
-func NewGDBOutputUtil(workPath string) *GDBOutputUtil {
-	return &GDBOutputUtil{
-		workPath:             workPath,
-		breakpointInverseMap: make(map[string]string, 10),
-		breakpointMap:        make(map[string]string, 10),
-	}
+func NewGDBOutputUtil() *GDBOutputUtil {
+	return &GDBOutputUtil{}
 }
 
 // parseAddBreakpointOutput 解析添加断点输出
@@ -47,32 +39,25 @@ func NewGDBOutputUtil(workPath string) *GDBOutputUtil {
 //			  times -> 0
 //			  original-location -> /var/fanCode/tempDir/56370c2d-6d34-11ef-9e80-5a7990d94760/main.c:43
 //			}
-func (g *GDBOutputUtil) parseAddBreakpointOutput(m map[string]interface{}) (bool, []*debugger.Breakpoint) {
+func (g *GDBOutputUtil) parseAddBreakpointOutput(m map[string]interface{}) (bool, string) {
 	// 处理响应
 	bkpts, success := g.getPayloadFromMap(m)
 	if !success {
-		return false, nil
+		return false, ""
 	}
 	// 读取断点
 	var breakpoint map[string]interface{}
 	bkpt := bkpts.(map[string]interface{})
 	if bkpt2, ok := bkpt["bkpt"]; ok {
 		if breakpoint, ok = bkpt2.(map[string]interface{}); !ok {
-			return false, nil
+			return false, ""
 		}
 	}
-	file := g.getStringFromMap(breakpoint, "file")
-	lineStr := g.getStringFromMap(breakpoint, "line")
-	line, _ := strconv.Atoi(lineStr)
 	// 设置map
 	number := g.getStringFromMap(breakpoint, "number")
 	g.lock.Lock()
 	defer g.lock.Unlock()
-	g.breakpointMap[number] = maskPath(g.workPath, file) + ":" + lineStr
-	g.breakpointInverseMap[maskPath(g.workPath, file)+":"+lineStr] = number
-	return success, []*debugger.Breakpoint{
-		{File: maskPath(g.workPath, file), Line: line},
-	}
+	return true, number
 }
 
 // parseRemoveBreakpointOutput 解析移除断点输出
@@ -82,20 +67,6 @@ func (g *GDBOutputUtil) parseRemoveBreakpointOutput(m map[string]interface{}) bo
 		return true
 	}
 	return false
-}
-
-// getBreakPointNumber 获取断点编号
-func (g *GDBOutputUtil) getBreakPointNumber(file string, line int) string {
-	l := strconv.Itoa(line)
-	return g.breakpointInverseMap[file+":"+l]
-}
-
-// removeBreakPoint 移除断点记录
-func (g *GDBOutputUtil) removeBreakPoint(file string, line int) {
-	l := strconv.Itoa(line)
-	number := g.breakpointInverseMap[file+":"+l]
-	delete(g.breakpointMap, number)
-	delete(g.breakpointInverseMap, file+":"+l)
 }
 
 // parseStackTraceOutput 解析栈帧输出
@@ -115,24 +86,27 @@ func (g *GDBOutputUtil) removeBreakPoint(file string, line int) {
 //	  }
 //	 ]
 //	}
-func (g *GDBOutputUtil) parseStackTraceOutput(m map[string]interface{}) []*debugger.StackFrame {
-	answer := make([]*debugger.StackFrame, 0, 5)
+func (g *GDBOutputUtil) parseStackTraceOutput(m map[string]interface{}) []dap.StackFrame {
+	answer := make([]dap.StackFrame, 0, 5)
 	stackMap, success := g.getPayloadFromMap(m)
 	if !success {
-		return []*debugger.StackFrame{}
+		return []dap.StackFrame{}
 	}
 	stackList := g.getListFromMap(stackMap, "stack")
 	for _, s := range stackList {
 		frame := g.getInterfaceFromMap(s, "frame")
-		id := g.getStringFromMap(frame, "level")
+		id, _ := strconv.Atoi(g.getStringFromMap(frame, "level"))
 		fun := g.getStringFromMap(frame, "func")
 		line := g.getIntFromMap(frame, "line")
 		fullname := g.getStringFromMap(frame, "fullname")
-		stack := &debugger.StackFrame{
-			ID:   id,
+		stack := dap.StackFrame{
+			Id:   id,
 			Name: fun,
 			Line: line,
-			Path: maskPath(g.workPath, fullname),
+			Source: &dap.Source{
+				Name: filepath.Base(fullname),
+				Path: fullname,
+			},
 		}
 		answer = append(answer, stack)
 	}
@@ -151,23 +125,70 @@ func (g *GDBOutputUtil) parseStackTraceOutput(m map[string]interface{}) []*debug
 //	  },
 //	 ]
 //	}
-func (g *GDBOutputUtil) parseFrameVariablesOutput(m map[string]interface{}) []*debugger.Variable {
+func (g *GDBOutputUtil) parseFrameVariablesOutput(m map[string]interface{}) []dap.Variable {
 	payload, success := g.getPayloadFromMap(m)
 	if !success {
-		return []*debugger.Variable{}
+		return []dap.Variable{}
 	}
 	variables := g.getListFromMap(payload, "variables")
-	answer := make([]*debugger.Variable, 0, 10)
+	if variables == nil {
+		variables = g.getListFromMap(payload, "locals")
+	}
+	answer := make([]dap.Variable, 0, 10)
 	for _, v := range variables {
-		variable := &debugger.Variable{
-			Name: g.convertVariableName("", g.getStringFromMap(v, "name")),
+		variable := dap.Variable{
+			Name: g.convertVariableName(g.getStringFromMap(v, "name")),
 			Type: g.getStringFromMap(v, "type"),
 		}
 		value := g.getStringFromMap(v, "value")
 		if g.checkKeyFromMap(v, "value") {
-			variable.Value = &value
+			variable.Value = value
 		}
 		answer = append(answer, variable)
+	}
+	return answer
+}
+
+// parseGlobalVariableOutput 解析全局变量获取的输出
+// class -> done
+//
+//	payload -> {
+//	 symbols -> {
+//	   debug -> [{
+//	     filename -> /var/fanCode/tempDir/ba7f078a-08da-11f0-8b21-00155db6c6d0/main.c
+//	     fullname -> /var/fanCode/tempDir/ba7f078a-08da-11f0-8b21-00155db6c6d0/main.c
+//	     symbols -> [
+//	       {
+//	         line -> 25
+//	         name -> globalChar
+//	         type -> char
+//	         description -> char globalChar;
+//	       }
+//	     ]
+//	   }]
+//	 }
+//
+// }
+func (g *GDBOutputUtil) parseGlobalVariableOutput(m map[string]interface{}) []dap.Variable {
+	payload, success := g.getPayloadFromMap(m)
+	if !success {
+		return []dap.Variable{}
+	}
+	symbols := g.getInterfaceFromMap(payload, "symbols")
+	debug := g.getListFromMap(symbols, "debug")
+	answer := make([]dap.Variable, 0, 10)
+	for _, t := range debug {
+		filename := g.getStringFromMap(t, "filename")
+		if strings.HasSuffix(filename, "main.c") || strings.HasSuffix(filename, "main") {
+			vars := g.getListFromMap(t, "symbols")
+			for _, v := range vars {
+				field := dap.Variable{
+					Name: g.convertVariableName(g.getStringFromMap(v, "name")),
+					Type: g.getStringFromMap(v, "type"),
+				}
+				answer = append(answer, field)
+			}
+		}
 	}
 	return answer
 }
@@ -189,25 +210,25 @@ func (g *GDBOutputUtil) parseFrameVariablesOutput(m map[string]interface{}) []*d
 //	  },
 //	 ]
 //	}
-func (g *GDBOutputUtil) parseVariablesOutput(ref string, m map[string]interface{}) []*debugger.Variable {
+func (g *GDBOutputUtil) parseVariablesOutput(ref string, m map[string]interface{}) []dap.Variable {
 	payload, success := g.getPayloadFromMap(m)
 	if !success {
-		return []*debugger.Variable{}
+		return []dap.Variable{}
 	}
 	children := g.getListFromMap(payload, "children")
-	answer := make([]*debugger.Variable, 0, 10)
+	answer := make([]dap.Variable, 0, 10)
 	for _, v := range children {
 		v = g.getInterfaceFromMap(v, "child")
-		field := &debugger.Variable{
-			Name: g.convertVariableName(ref, g.getStringFromMap(v, "name")),
+		field := dap.Variable{
+			Name: g.convertVariableName(g.getStringFromMap(v, "name")),
 			Type: g.getStringFromMap(v, "type"),
 		}
 		if g.checkKeyFromMap(v, "value") {
 			value := g.getStringFromMap(v, "value")
-			field.Value = &value
+			field.Value = value
 		}
 		if g.checkKeyFromMap(v, "numchild") {
-			field.ChildrenNumber = g.getIntFromMap(v, "numchild")
+			field.IndexedVariables = g.getIntFromMap(v, "numchild")
 		}
 		answer = append(answer, field)
 	}
@@ -236,26 +257,22 @@ func (g *GDBOutputUtil) parseStoppedEventOutput(m interface{}) *StoppedOutput {
 	if r == "breakpoint-hit" {
 		frame := g.getInterfaceFromMap(m, "frame")
 		fullname := g.getStringFromMap(frame, "fullname")
-		file := maskPath(g.workPath, fullname)
 		lineStr := g.getStringFromMap(frame, "line")
 		line, _ := strconv.Atoi(lineStr)
 		return &StoppedOutput{
-			reason:   constants.BreakpointStopped,
-			fullname: fullname,
-			file:     file,
-			line:     line,
+			reason: constants.BreakpointStopped,
+			file:   fullname,
+			line:   line,
 		}
 	} else if r == "end-stepping-range" || r == "function-finished" {
 		frame := g.getInterfaceFromMap(m, "frame")
 		fullname := g.getStringFromMap(frame, "fullname")
-		file := maskPath(g.workPath, fullname)
 		lineStr := g.getStringFromMap(frame, "line")
 		line, _ := strconv.Atoi(lineStr)
 		return &StoppedOutput{
-			reason:   constants.StepStopped,
-			file:     file,
-			fullname: fullname,
-			line:     line,
+			reason: constants.StepStopped,
+			file:   fullname,
+			line:   line,
 		}
 	} else if r == "exited-normally" {
 		return &StoppedOutput{
@@ -267,10 +284,9 @@ func (g *GDBOutputUtil) parseStoppedEventOutput(m interface{}) *StoppedOutput {
 }
 
 type StoppedOutput struct {
-	reason   constants.StoppedReasonType
-	file     string
-	fullname string
-	line     int
+	reason constants.StoppedReasonType
+	file   string
+	line   int
 }
 
 // convertVariableName 解析变量名称
@@ -278,14 +294,13 @@ type StoppedOutput struct {
 // 比如获取一个结构体的属性，属性名：localItem.id  ->  id
 // 解引用情况：dynamicInt.*(int *)0x555555602260 -> *dynamicInt
 // 数组情况：array.0 -> 0
-func (g *GDBOutputUtil) convertVariableName(ref string, variableName string) string {
+func (g *GDBOutputUtil) convertVariableName(variableName string) string {
 	index := strings.LastIndex(variableName, ".")
 	if index == -1 {
 		return variableName
 	}
 	if variableName[index+1] == '*' {
-		refStruct, _ := parseReference(ref)
-		return fmt.Sprintf("*%s", refStruct.VariableName)
+		return fmt.Sprintf("*%s", variableName[0:index-1])
 	}
 	if variableName[index+1] >= '0' && variableName[index+1] <= '9' {
 		return variableName[index+1:]
@@ -300,6 +315,19 @@ func (g *GDBOutputUtil) isShouldBeFilterAddress(address string) bool {
 	}
 	re := regexp.MustCompile(`<__libc_csu_init.*>$`)
 	return re.MatchString(address)
+}
+
+func (g *GDBOutputUtil) checkIsAddress(value string) bool {
+	a := strings.Split(value, " ")
+	if len(a) < 1 {
+		return false
+	}
+	pattern := "^0x[0-9a-fA-F]+$"
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return false
+	}
+	return re.MatchString(a[0])
 }
 
 func (g *GDBOutputUtil) convertValueToAddress(value string) string {

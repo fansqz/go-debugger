@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // NotificationCallback is a callback used to report the notifications that GDB
@@ -87,6 +88,52 @@ func (gdb *Gdb) SendAsync(callback AsyncCallback, operation string, arguments ..
 		return err
 	}
 	return nil
+}
+
+// SendWithTimeout 异步发送请求到dap，带超时
+func (gdb *Gdb) SendWithTimeout(timeout time.Duration, operation string, arguments ...string) (map[string]interface{}, error) {
+	pending := make(chan map[string]interface{})
+	gdb.mutex.Lock()
+	sequence := strconv.FormatInt(gdb.sequence, 10)
+	gdb.pending[sequence] = pending
+	gdb.sequence++
+	gdb.mutex.Unlock()
+	// prepare the command
+	buffer := bytes.NewBufferString(fmt.Sprintf("%s-%s", sequence, operation))
+	for _, argument := range arguments {
+		buffer.WriteByte(' ')
+		if strings.ContainsAny(argument, "\a\b\f\n\r\t\v\\'\" ") {
+			argument = strconv.Quote(argument)
+		}
+		buffer.WriteString(argument)
+	}
+	buffer.WriteByte('\n')
+
+	// send the command
+	if _, err := gdb.stdin.Write(buffer.Bytes()); err != nil {
+		return nil, err
+	}
+
+	// 启动一个定时器，当超时时间到达时，定时器的通道会接收到信号
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	// 同步等待结果或超时
+	var result map[string]interface{}
+	select {
+	case result = <-pending:
+		// 收到响应，加锁并从 pending 映射中移除该请求序列号对应的通道
+		gdb.mutex.Lock()
+		delete(gdb.pending, sequence)
+		gdb.mutex.Unlock()
+		return result, nil
+	case <-timer.C:
+		// 超时，加锁并从 pending 映射中移除该请求序列号对应的通道
+		gdb.mutex.Lock()
+		delete(gdb.pending, sequence)
+		gdb.mutex.Unlock()
+		return nil, fmt.Errorf("timout: %v", timeout)
+	}
 }
 
 // CheckedSend works like Send, except that if the result returned by

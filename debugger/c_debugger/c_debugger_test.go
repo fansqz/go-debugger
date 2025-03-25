@@ -1,363 +1,222 @@
 package c_debugger
 
-//
-//import (
-//	e "FanCode/error"
-//	"fmt"
-//	"github.com/stretchr/testify/assert"
-//	"go-debugger/constants"
-//	"go-debugger/debugger"
-//	"go-debugger/utils"
-//	"log"
-//	"os"
-//	"path"
-//	"testing"
-//)
-//
-//func testGdbDebugger(t *testing.T) {
-//	var cha = make(chan interface{}, 10)
-//	// 创建工作目录, 用户的临时文件
-//	executePath := getExecutePath("/var/fanCode/tempDir")
-//	defer os.RemoveAll(executePath)
-//	if err := os.MkdirAll(executePath, os.ModePerm); err != nil {
-//		log.Printf("MkdirAll error: %v\n", err)
-//		return
-//	}
-//	// 保存用户代码到用户的执行路径，并获取编译文件列表
-//	var compileFiles []string
-//	var err2 *e.Error
-//	code := `#include <stdio.h>           //1
-//int main() {                              //2
-//    int a, b;                             //3
-//    a = 1;                                //4
-//	printf("aaa");                        //5
-//	scanf("%d", &a);                      //6
-//    printf("a * a = %d\n", a * a);        //7
-//	b = 3;                                //8
-//	scanf("%d", &a);                      //9
-//    printf("a + a = %d\n", a + a);        //10
-//    return 0;                             //11
-//}
-//`
-//	if compileFiles, err2 = saveUserCode(constants.LanguageC,
-//		code, executePath); err2 != nil {
-//		log.Println(err2)
-//		return
-//	}
-//	debugNotificationCallback := func(data interface{}) {
-//		cha <- data
-//	}
-//	debug := NewGdbDebugger()
-//	err := debug.Start(&debugger.StartOption{
-//		WorkPath:     executePath,
-//		CompileFiles: compileFiles,
-//		BreakPoints:  []*debugger.Breakpoint{{"/main.c", 4}, {"/main.c", 8}},
-//		GdbCallback:  debugNotificationCallback,
-//	})
-//	assert.Nil(t, err)
-//	// 接受调试编译成功信息
-//	data := <-cha
-//	assert.Equal(t, &debugger.CompileEvent{
-//		Success: true,
-//		Message: "用户代码编译成功",
-//	}, data)
-//	data = <-cha
-//	assert.Equal(t, &debugger.LaunchEvent{
-//		Success: true,
-//		Message: "目标代码加载成功",
-//	}, data)
-//
-//	// 添加断点
-//	data = <-cha
-//	assert.Equal(t, &debugger.BreakpointEvent{
-//		Reason:      constants.NewType,
-//		Breakpoints: []*debugger.Breakpoint{{"/main.c", 4}},
-//	}, data)
-//	data = <-cha
-//	assert.Equal(t, &debugger.BreakpointEvent{
-//		Reason:      constants.NewType,
-//		Breakpoints: []*debugger.Breakpoint{{"/main.c", 8}},
-//	}, data)
-//
-//	// 启动用户程序
-//	err = debug.Send("1 2\n")
-//	assert.Nil(t, err)
-//	data = <-cha
-//	assert.Equal(t, &debugger.ContinuedEvent{}, data)
-//
-//	// 程序到达第一个断点
-//	data = <-cha
-//	assert.Equal(t, &debugger.StoppedEvent{
-//		Reason: constants.BreakpointStopped,
-//		File:   "/main.c",
-//		Line:   4,
-//	}, data)
-//
-//	// continue
-//	err = debug.Continue()
-//	assert.Nil(t, err)
-//	j := 0
-//	for i := 0; i < 2; i++ {
-//		data = <-cha
-//		switch data.(type) {
-//		case *debugger.ContinuedEvent:
-//			j++
-//		case *debugger.OutputEvent:
-//			j += 2
-//			assert.Equal(t, &debugger.OutputEvent{"aaaa * a = 1\n"}, data)
-//		}
-//	}
-//	assert.Equal(t, j, 3)
-//
-//	data = <-cha
-//	assert.Equal(t, &debugger.StoppedEvent{
-//		Reason: constants.BreakpointStopped,
-//		File:   "/main.c",
-//		Line:   8,
-//	}, data)
-//
-//	// 测试step
-//	err = debug.StepOver()
-//	assert.Nil(t, err)
-//	data = <-cha
-//	assert.Equal(t, &debugger.ContinuedEvent{}, data)
-//	data = <-cha
-//	assert.Equal(t, &debugger.StoppedEvent{
-//		Reason: constants.StepStopped,
-//		File:   "/main.c",
-//		Line:   9,
-//	}, data)
-//
-//	//  测试stepIn是否会进入系统依赖的函数内部
-//	err = debug.StepIn()
-//	assert.Nil(t, err)
-//	data = <-cha
-//	assert.Equal(t, &debugger.ContinuedEvent{}, data)
-//	assert.Equal(t, len(cha), 0)
-//
-//	data = <-cha
-//	assert.Equal(t, &debugger.StoppedEvent{
-//		Reason: constants.StepStopped,
-//		File:   "/main.c",
-//		Line:   10,
-//	}, data)
-//
-//	// 测试结束
-//	err = debug.Continue()
-//	assert.Nil(t, err)
-//	j = 0
-//	for i := 0; i < 2; i++ {
-//		data = <-cha
-//		switch data.(type) {
-//		case *debugger.ContinuedEvent:
-//			j++
-//		case *debugger.OutputEvent:
-//			j++
-//			assert.Equal(t, &debugger.OutputEvent{"a + a = 4\n"}, data)
-//		}
-//	}
-//	data = <-cha
-//	assert.Equal(t, &debugger.ExitedEvent{
-//		ExitCode: 0,
-//	}, data)
-//}
-//
-//func TestGdbDebugger2(t *testing.T) {
-//	var cha = make(chan interface{}, 10)
-//	// 创建工作目录, 用户的临时文件
-//	executePath := getExecutePath("/var/fanCode/tempDir")
-//	defer os.RemoveAll(executePath)
-//	if err := os.MkdirAll(executePath, os.ModePerm); err != nil {
-//		log.Printf("MkdirAll error: %v\n", err)
-//		return
-//	}
-//	// 保存用户代码到用户的执行路径，并获取编译文件列表
-//	var compileFiles []string
-//	var err2 error
-//	code := `#include <stdio.h>        // 1
-//#include <stdlib.h>       // 2
-//// 定义枚举类型           // 3
-//typedef enum {            // 4
-//    RED,                  // 5
-//    GREEN,                // 6
-//    BLUE                  // 7
-//} Color;                  // 8
-//// 定义结构体类型         // 9
-//typedef struct {          // 10
-//    int id;               // 11
-//    float weight;         // 12
-//    Color color;          // 13
-//} Item;                   // 14
-//// 定义联合体类型         // 15
-//typedef union {           // 16
-//    int ival;             // 17
-//    float fval;           // 18
-//    char cval;            // 19
-//} Value;                  // 20
-//typedef int * PTR_INT;
-//// 全局变量               // 21
-//int globalInt = 10;       // 22
-//float globalFloat = 3.14; // 23
-//char globalChar = 'A';    // 24
-//Item globalItem = {1, 65.5, RED}; // 25
-//// 静态全局变量           // 26
-//static int staticGlobalInt = 20; // 27
-//// 函数声明               // 28
-//void manipulateLocals();  // 29
-//void manipulatePointers();// 30
-//int main() {              // 31
-//    manipulateLocals(2);   // 32
-//    manipulatePointers(); // 33
-//    return 0;             // 34
-//}                         // 35
-//void manipulateLocals(int argint) { // 36
-//    // 局部变量           // 37
-//    int localInt = 5;     // 38
-//    char localChar = 'G'; // 39
-//    // 静态局部变量       // 40
-//    static float staticLocalFloat = 6.78; // 41
-//    // 结构体局部变量     // 42
-//    Item localItem;       // 43
-//    localItem.id = 2;     // 44
-//    localItem.weight = 42.0;   // 45
-//    localItem.color = GREEN;   // 46
-//    // 局部枚举变量       // 47
-//    Color localColor = BLUE;   // 48
-//    // 局部联合体变量     // 49
-//    Value localValue;     // 50
-//    localValue.ival = 123;// 51
-//    // 输出局部变量的值   // 52
-//    // printf("localInt: %d, localChar: %c, staticLocalFloat: %.2f\n", localInt, localChar, staticLocalFloat); // 53
-//    // printf("localItem: id=%d, weight=%.1f, color=%d\n", localItem.id, localItem.weight, localItem.color);     // 54
-//    // printf("localColor: %d, localValue: %d\n", localColor, localValue.ival);   // 55
-//}                         // 56
-//void manipulatePointers() { // 57
-//    // 动态分配的变量   // 58
-//    PTR_INT dynamicInt = (int*) malloc(sizeof(int)); // 59
-//    *dynamicInt = 30;           // 60
-//    // 指针变量         // 61
-//    int* ptrToInt = &globalInt; // 62
-//    Item* ptrToItem = &globalItem; // 63
-//    Color* ptrToColor = (Color*) malloc(sizeof(Color)); // 64
-//    *ptrToColor = BLUE;         // 65
-//    // 数组变量         // 66
-//    int intArray[3] = { 1, 2, 3 }; // 67
-//    float floatArray[] = { 1.1f, 2.2f, 3.3f }; // 68
-//    Color colorArray[3] = { RED, GREEN, BLUE }; // 69
-//    // 字符串           // 70
-//    char* string = "Hello, World!"; // 71
-//	// 空指针
-//	Item* nilPoit;  //72
-//    // 清理动态分配的内存 // 73
-//    free(dynamicInt);     // 74
-//    free(ptrToColor);     // 75
-//}                         // 76
-//`
-//	if compileFiles, err2 = saveUserCode(constants.LanguageC,
-//		code, executePath); err2 != nil {
-//		log.Println(err2)
-//		return
-//	}
-//	debugNotificationCallback := func(data interface{}) {
-//		cha <- data
-//	}
-//	debug := NewGdbDebugger()
-//	err := debug.Start(&debugger.StartOption{
-//		WorkPath:     executePath,
-//		CompileFiles: compileFiles,
-//		BreakPoints:  []*debugger.Breakpoint{{"/main.c", 53}, {"/main.c", 76}},
-//		GdbCallback:  debugNotificationCallback,
-//	})
-//	assert.Nil(t, err)
-//	// 接受调试编译成功信息
-//	data := <-cha
-//	assert.Equal(t, &debugger.CompileEvent{
-//		Success: true,
-//		Message: "用户代码编译成功",
-//	}, data)
-//	data = <-cha
-//	assert.Equal(t, &debugger.LaunchEvent{
-//		Success: true,
-//		Message: "目标代码加载成功",
-//	}, data)
-//	<-cha
-//	<-cha
-//	<-cha
-//	<-cha
-//	// 测试第一个断点中的变量信息
-//	stacks, err := debug.GetStackTrace()
-//	assert.Nil(t, err)
-//	// 获取作用域
-//	variables, err := debug.GetFrameVariables(stacks[0].ID)
-//	assert.Nil(t, err)
-//	for _, variable := range variables {
-//		if variable.Reference != "" {
-//			v, err := debug.GetVariables(variable.Reference)
-//			fmt.Println(v)
-//			assert.Nil(t, err)
-//		}
-//	}
-//
-//	// 测试第二个断点中的变量信息
-//	err = debug.Continue()
-//	data = <-cha
-//	data = <-cha
-//	stacks, err = debug.GetStackTrace()
-//	assert.Nil(t, err)
-//	// 获取作用域
-//	variables, err = debug.GetFrameVariables(stacks[0].ID)
-//	assert.Nil(t, err)
-//	// 测试打印三层
-//	for _, variable := range variables {
-//		fmt.Println(variable)
-//		if variable.Reference != "" {
-//			vs, _ := debug.GetVariables(variable.Reference)
-//			fmt.Println(vs)
-//			for _, v := range vs {
-//				if v.Reference != "" {
-//					cd, _ := debug.GetVariables(v.Reference)
-//					fmt.Println(cd)
-//				}
-//			}
-//		}
-//	}
-//}
-//
-//// getExecutePath 给用户的此次运行生成一个临时目录
-//func getExecutePath(tempDir string) string {
-//	uuid := utils.GetUUID()
-//	executePath := path.Join(tempDir, uuid)
-//	return executePath
-//}
-//
-//func saveUserCode(language constants.LanguageType, codeStr string, executePath string) ([]string, *e.Error) {
-//	var compileFiles []string
-//	var mainFile string
-//	var err2 *e.Error
-//
-//	if mainFile, err2 = getMainFileNameByLanguage(language); err2 != nil {
-//		log.Println(err2)
-//		return nil, err2
-//	}
-//	if err := os.WriteFile(path.Join(executePath, mainFile), []byte(codeStr), 0644); err != nil {
-//		log.Println(err)
-//		return nil, e.ErrServer
-//	}
-//	// 将main文件进行编译即可
-//	compileFiles = []string{path.Join(executePath, mainFile)}
-//
-//	return compileFiles, nil
-//}
-//
-//func getMainFileNameByLanguage(language constants.LanguageType) (string, *e.Error) {
-//	switch language {
-//	case constants.LanguageC:
-//		return "main.c", nil
-//	case constants.LanguageJava:
-//		return "Main.java", nil
-//	case constants.LanguageGo:
-//		return "main.go", nil
-//	default:
-//		return "", e.ErrLanguageNotSupported
-//	}
-//}
+import (
+	"github.com/google/go-dap"
+	"io"
+	"os"
+	"os/exec"
+	"path"
+	"testing"
+
+	"github.com/fansqz/go-debugger/debugger"
+	"github.com/fansqz/go-debugger/utils"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestDebug(t *testing.T) {
+	var cha = make(chan dap.EventMessage, 10)
+
+	workPath := path.Join("/var/fanCode/tempDir", utils.GetUUID())
+	defer os.RemoveAll(workPath)
+
+	execFile, err := compileFile(workPath, "debug.c")
+	assert.Nil(t, err)
+	debug := NewCDebugger()
+	err = debug.Start(&debugger.StartOption{
+		ExecFile: execFile,
+		// Callback 事件回调
+		Callback: func(message dap.EventMessage) {
+			cha <- message
+		},
+	})
+	assert.Nil(t, err)
+
+	// 设置断点
+	err = debug.SetBreakpoints(dap.Source{Path: "main.c"}, []dap.SourceBreakpoint{
+		{Line: 3},
+		{Line: 7},
+	})
+	assert.Nil(t, err)
+
+	// 接受调试编译成功信息
+	err = debug.Run()
+	assert.Nil(t, err)
+	event := <-cha
+	assert.Equal(t, "continued", event.GetEvent().Event)
+	event = <-cha
+	assert.Equal(t, "stopped", event.GetEvent().Event)
+	assert.Equal(t, getStoppedLine(debug), 3)
+
+	// 执行next
+	err = debug.StepOver()
+	assert.Nil(t, err)
+	event = <-cha
+	assert.Equal(t, "continued", event.GetEvent().Event)
+	event = <-cha
+	assert.Equal(t, "stopped", event.GetEvent().Event)
+	assert.Equal(t, getStoppedLine(debug), 5)
+
+	// 执行continue
+	err = debug.Continue()
+	assert.Nil(t, err)
+	event = <-cha
+	assert.Equal(t, "continued", event.GetEvent().Event)
+
+	// 模拟用户输入
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	io.WriteString(w, "10\n")
+	event = <-cha
+	assert.Equal(t, "stopped", event.GetEvent().Event)
+
+	// 执行结束
+	err = debug.Continue()
+	event = <-cha
+	assert.Equal(t, "continued", event.GetEvent().Event)
+	event = <-cha
+	assert.Equal(t, "terminated", event.GetEvent().Event)
+}
+
+func TestVariable(t *testing.T) {
+
+	workPath := path.Join("/var/fanCode/tempDir", utils.GetUUID())
+	defer os.RemoveAll(workPath)
+
+	// 编译
+	execFile, err := compileFile(workPath, "variable.c")
+	assert.Nil(t, err)
+
+	// 创建debugger
+	debug := NewCDebugger()
+	var cha = make(chan dap.EventMessage, 10)
+	err = debug.Start(&debugger.StartOption{
+		ExecFile: execFile,
+		// Callback 事件回调
+		Callback: func(message dap.EventMessage) {
+			cha <- message
+		},
+	})
+	assert.Nil(t, err)
+
+	// 设置断点
+	err = debug.SetBreakpoints(dap.Source{Path: "main.c"}, []dap.SourceBreakpoint{
+		{Line: 55},
+		{Line: 76},
+	})
+	assert.Nil(t, err)
+
+	// 启动调试
+	err = debug.Run()
+	assert.Nil(t, err)
+	event := <-cha
+	assert.Equal(t, "continued", event.GetEvent().Event)
+	event = <-cha
+	assert.Equal(t, "stopped", event.GetEvent().Event)
+
+	// 测试第一个断点中的变量信息
+	stacks, err := debug.GetStackTrace()
+	assert.Nil(t, err)
+
+	// 校验作用域
+	scopes, err := debug.GetScopes(stacks[0].Id)
+	assert.Equal(t, []dap.Scope{
+		{Name: "Global", VariablesReference: 1001},
+		{Name: "Local", VariablesReference: 1002},
+	}, scopes)
+
+	// 全局变量检查
+	globalVariables, err := debug.GetVariables(scopes[0].VariablesReference)
+	assert.Nil(t, err)
+	assert.Equal(t, []dap.Variable{
+		{Name: "globalChar", Value: "65 'A'", Type: "char"},
+		{Name: "globalFloat", Value: "3.1400001", Type: "float"},
+		{Name: "globalInt", Value: "10", Type: "int"},
+		{Name: "globalItem", Value: "", Type: "Item", VariablesReference: 1100},
+	}, globalVariables[0:4])
+	assert.Equal(t, []dap.Variable{{Name: "staticGlobalInt", Value: "20", Type: "int"}}, globalVariables[5:6])
+	assert.Equal(t, "globalItemPtr", globalVariables[4].Name)
+	assert.Equal(t, "Item *", globalVariables[4].Type)
+	assert.Equal(t, 1101, globalVariables[4].VariablesReference)
+	globalItem, err := debug.GetVariables(globalVariables[4].VariablesReference)
+	assert.Nil(t, err)
+	assert.Equal(t, []dap.Variable{
+		{Name: "id", Value: "1", Type: "int"},
+		{Name: "weight", Value: "65.5", Type: "float"},
+		{Name: "color", Value: "RED", Type: "Color"},
+	}, globalItem)
+	globalItemPtr, err := debug.GetVariables(globalVariables[4].VariablesReference)
+	assert.Nil(t, err)
+	assert.Equal(t, []dap.Variable{
+		{Name: "id", Value: "1", Type: "int"},
+		{Name: "weight", Value: "65.5", Type: "float"},
+		{Name: "color", Value: "RED", Type: "Color"},
+	}, globalItemPtr)
+
+	localVariables, err := debug.GetVariables(scopes[1].VariablesReference)
+	assert.Nil(t, err)
+	assert.Equal(t, []dap.Variable{
+		{Name: "argint", Value: "2", Type: "int"},
+		{Name: "localInt", Value: "5", Type: "int"},
+		{Name: "localChar", Value: "71 'G'", Type: "char"},
+		{Name: "staticLocalFloat", Value: "6.78000021", Type: "float"},
+		{Name: "localItem", Value: "", Type: "Item", VariablesReference: 1102},
+		{Name: "localColor", Value: "BLUE", Type: "Color"},
+		{Name: "localValue", Value: "", Type: "Value", VariablesReference: 1103},
+	}, localVariables)
+	localItem, err := debug.getVariables(localVariables[4].VariablesReference)
+	assert.Nil(t, err)
+	assert.Equal(t, []dap.Variable{
+		{Name: "id", Value: "2", Type: "int"},
+		{Name: "weight", Value: "42", Type: "float"},
+		{Name: "color", Value: "GREEN", Type: "Color"},
+	}, localItem)
+	localValue, err := debug.getVariables(localVariables[6].VariablesReference)
+	assert.Nil(t, err)
+	assert.Equal(t, []dap.Variable{
+		{Name: "ival", Value: "123", Type: "int"},
+		{Name: "fval", Value: "1.72359711e-43", Type: "float"},
+		{Name: "cval", Value: "123 '{'", Type: "char"},
+	}, localValue)
+
+	err = debug.Continue()
+	assert.Nil(t, err)
+	event = <-cha
+	assert.Equal(t, "continued", event.GetEvent().Event)
+	event = <-cha
+	assert.Equal(t, "stopped", event.GetEvent().Event)
+}
+
+func getStoppedLine(gdb debugger.Debugger) int {
+	stackTrace, _ := gdb.GetStackTrace()
+	if len(stackTrace) != 0 {
+		return stackTrace[0].Line
+	}
+	return 0
+}
+
+// compileFile 开始编译文件
+func compileFile(workPath string, cFile string) (string, error) {
+	// 创建工作目录, 用户的临时文件
+	if err := os.MkdirAll(workPath, os.ModePerm); err != nil {
+		return "", err
+	}
+
+	// 保存待编译文件
+	codeFile := path.Join(workPath, "main.c")
+	code, err := os.ReadFile(path.Join("./test_file", cFile))
+	if err != nil {
+		return "", err
+	}
+	err = os.WriteFile(codeFile, code, 777)
+	if err != nil {
+		return "", err
+	}
+	execFile := path.Join(workPath, "main")
+
+	cmd := exec.Command("gcc", "-g", "-o", execFile, codeFile)
+	_, err = cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return execFile, err
+}

@@ -2,20 +2,11 @@ package debugger
 
 import (
 	"github.com/fansqz/go-debugger/constants"
-	"time"
 )
 
 // StartOption 启动调试的参数
 type StartOption struct {
-	// CompileTimeout 编译超时
-	CompileTimeout time.Duration
-
-	// CompileFiles 需要编译的文件
-	CompileFiles []string
-	// WorkPath 工作目录
-	WorkPath string
-	// BreakPoints 初始化的断点
-	BreakPoints []*Breakpoint
+	ExecFile string
 	// Callback 事件回调
 	Callback NotificationCallback
 }

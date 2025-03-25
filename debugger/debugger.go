@@ -1,10 +1,10 @@
 package debugger
 
 import (
-	"context"
+	"github.com/google/go-dap"
 )
 
-type NotificationCallback func(interface{})
+type NotificationCallback func(message dap.EventMessage)
 
 // Debugger
 // 用户的一次调试过程处理
@@ -13,35 +13,37 @@ type NotificationCallback func(interface{})
 type Debugger interface {
 	// Start
 	// 开始调试，及调用start命令，callback用来异步处理用户程序输出
-	Start(ctx context.Context, option *StartOption) error
-	// Send 输入
-	Send(ctx context.Context, input string) error
+	Start(option *StartOption) error
+	// Run 启动程序执行
+	Run() error
 	// StepOver 下一步，不会进入函数内部
-	StepOver(ctx context.Context) error
+	StepOver() error
 	// StepIn 下一步，会进入函数内部
-	StepIn(ctx context.Context) error
+	StepIn() error
 	// StepOut 单步退出
-	StepOut(ctx context.Context) error
+	StepOut() error
 	// Continue 忽略继续执行
-	Continue(ctx context.Context) error
-	// AddBreakpoints 添加断点
-	// 返回的是添加成功的断点
-	AddBreakpoints(ctx context.Context, breakpoints []*Breakpoint) error
-	// RemoveBreakpoints 移除断点
-	// 返回的是移除成功的断点
-	RemoveBreakpoints(ctx context.Context, breakpoints []*Breakpoint) error
+	Continue() error
+	// SetBreakpoints 设置断点
+	SetBreakpoints(dap.Source, []dap.SourceBreakpoint) error
 	// GetStackTrace 获取栈帧
-	GetStackTrace(ctx context.Context) ([]*StackFrame, error)
-	// GetFrameVariables 获取某个栈帧中的变量列表
-	GetFrameVariables(ctx context.Context, frameId string) ([]*Variable, error)
+	GetStackTrace() ([]dap.StackFrame, error)
+	// GetScopes 获取scopes
+	GetScopes(frameId int) ([]dap.Scope, error)
 	// GetVariables 查看引用的值
-	GetVariables(ctx context.Context, reference string) ([]*Variable, error)
+	GetVariables(reference int) ([]dap.Variable, error)
 	// Terminate 终止调试
 	// 调用完该命令以后可以重新Launch
-	Terminate(ctx context.Context) error
-	// StructVisual 以结构体为导向的可视化方法，一般用作树、图的可视化
-	StructVisual(ctx context.Context, query *StructVisualQuery) (*StructVisualData, error)
-	// VariableVisual 以变量导向的可视化方法，一般用作数组的可视化
-	// 传递的是数组的变量名称、作为数组指针的变量名称等
-	VariableVisual(ctx context.Context, query *VariableVisualQuery) (*VariableVisualData, error)
+	Terminate() error
+}
+
+// NewEvent builds an Event struct with the specified fields.
+func NewEvent(seq int, event string) *dap.Event {
+	return &dap.Event{
+		ProtocolMessage: dap.ProtocolMessage{
+			Seq:  seq,
+			Type: "event",
+		},
+		Event: event,
+	}
 }

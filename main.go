@@ -1,43 +1,72 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
+	"flag"
+	"github.com/fansqz/go-debugger/debugger"
+	"github.com/fansqz/go-debugger/debugger/c_debugger"
+	"github.com/google/go-dap"
+	"log"
 	"net"
 )
 
-// TCP Server端测试
-// 处理函数
-func process(conn net.Conn) {
-	debugger := NewDebuggerHandler()
-	defer conn.Close() // 关闭连接
+var ConnList []net.Conn
+
+func main() {
+	port := flag.String("port", "5000", "TCP port to listen on")
+	execFile := flag.String("file", "", "Exec file")
+	language := flag.String("language", "c", "Program language")
+	flag.Parse()
+	if execFile == nil || *execFile == "" {
+		log.Fatal("exec file cannot be empty")
+		return
+	}
+	if language == nil || *language == "" {
+		log.Fatal("language cannot be empty")
+		return
+	}
+	// 监听端口
+	listener, err := net.Listen("tcp", ":"+*port)
+	if err != nil {
+		log.Fatalf("failed to start listening on the port: %s\n", *port)
+		return
+	}
+	defer listener.Close()
+	log.Println("Started server at", listener.Addr())
+
+	// 启动调试器
+	debug, err := createDebugger(*language, *execFile)
+	if err != nil {
+		log.Fatalf("start debug fail, err = %s\n", err)
+		return
+	}
+
 	for {
-		reader := bufio.NewReader(conn)
-		var buf [128]byte
-		n, err := reader.Read(buf[:])
+		conn, err := listener.Accept()
+		ConnList = append(ConnList, conn)
 		if err != nil {
-			fmt.Println("read from client failed, err: ", err)
-			break
+			log.Println("Connection failed:", err)
+			continue
 		}
-		// 处理请求
-		debugger.handle(conn, buf[:n])
+		log.Println("Accepted connection from", conn.RemoteAddr())
+		// Handle multiple client connections concurrently
+		go handleConnection(conn, debug)
 	}
 }
 
-func main() {
-	listen, err := net.Listen("tcp", "127.0.0.1:8888")
-	if err != nil {
-		fmt.Println("Listen() failed, err: ", err)
-		return
+// createDebugger 创建调试器
+func createDebugger(language string, execFile string) (debugger.Debugger, error) {
+	var d debugger.Debugger
+	switch language {
+	case "c":
+		d = c_debugger.NewCDebugger()
 	}
-	for {
-		// 监听客户端的连接请求
-		conn, err := listen.Accept()
-		if err != nil {
-			fmt.Println("Accept() failed, err: ", err)
-			continue
-		}
-		// 启动一个goroutine来处理客户端的连接请求
-		go process(conn)
-	}
+	err := d.Start(&debugger.StartOption{
+		ExecFile: execFile,
+		Callback: func(event dap.EventMessage) {
+			for _, conn := range ConnList {
+				dap.WriteProtocolMessage(conn, event)
+			}
+		},
+	})
+	return d, err
 }
