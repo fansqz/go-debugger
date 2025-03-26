@@ -11,11 +11,21 @@ import (
 
 var ConnList []net.Conn
 
+// 定义版本号
+const Version = "1.0.0"
+
 func main() {
+	showVersion := flag.Bool("version", false, "Show the version number")
 	port := flag.String("port", "5000", "TCP port to listen on")
 	execFile := flag.String("file", "", "Exec file")
 	language := flag.String("language", "c", "Program language")
 	flag.Parse()
+
+	// 检查是否需要显示版本信息
+	if *showVersion {
+		log.Printf("Version: %s\n", Version)
+		return
+	}
 	if execFile == nil || *execFile == "" {
 		log.Fatal("exec file cannot be empty")
 		return
