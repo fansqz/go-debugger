@@ -27,11 +27,11 @@ func main() {
 		return
 	}
 	if execFile == nil || *execFile == "" {
-		fmt.Printf("exec file cannot be empty")
+		fmt.Println("exec file cannot be empty")
 		return
 	}
 	if language == nil || *language == "" {
-		fmt.Printf("language cannot be empty")
+		fmt.Println("language cannot be empty")
 		return
 	}
 	// 监听端口
@@ -41,7 +41,7 @@ func main() {
 		return
 	}
 	defer listener.Close()
-	fmt.Printf("Started server at", listener.Addr())
+	fmt.Printf("dap started listening at: %s\n", listener.Addr().String())
 
 	// 启动调试器
 	debug, err := createDebugger(*language, *execFile)
@@ -54,10 +54,10 @@ func main() {
 		conn, err := listener.Accept()
 		ConnList = append(ConnList, conn)
 		if err != nil {
-			fmt.Printf("Connection failed:", err)
+			fmt.Printf("Connection failed: %v\n", err)
 			continue
 		}
-		fmt.Printf("Accepted connection from", conn.RemoteAddr())
+		fmt.Printf("Accepted connection from %s\n", conn.RemoteAddr().String())
 		// Handle multiple client connections concurrently
 		go handleConnection(conn, debug)
 	}
