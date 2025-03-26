@@ -6,7 +6,6 @@ import (
 	"github.com/fansqz/go-debugger/debugger"
 	"github.com/google/go-dap"
 	"io"
-	"log"
 	"net"
 	"sync"
 )
@@ -29,14 +28,14 @@ func handleConnection(conn net.Conn, d debugger.Debugger) {
 		err := debugSession.handleRequest()
 		if err != nil {
 			if err == io.EOF {
-				log.Println("No more data to read:", err)
+				fmt.Printf("No more data to read:", err)
 				break
 			}
-			log.Fatal("Server error: ", err)
+			fmt.Printf("Server error: ", err)
 		}
 	}
 
-	log.Println("Closing connection from", conn.RemoteAddr())
+	fmt.Printf("Closing connection from", conn.RemoteAddr())
 	debugSession.sendWg.Wait()
 	close(debugSession.sendQueue)
 	conn.Close()
@@ -79,7 +78,7 @@ func (d *DebugSession) dispatchRequest(request dap.Message) {
 		if baseReq, ok := request.(*dap.Request); ok {
 			d.send(newErrorResponse(baseReq.Seq, baseReq.Command, fmt.Sprint("%s is not yet supported", baseReq.Command)))
 		}
-		log.Fatalf("Unable to process %#v", request)
+		fmt.Printf("Unable to process %#v", request)
 	}
 }
 
