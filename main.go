@@ -6,15 +6,20 @@ import (
 	"github.com/fansqz/go-debugger/debugger"
 	"github.com/fansqz/go-debugger/debugger/c_debugger"
 	"github.com/google/go-dap"
+	"log"
 	"net"
 )
 
 var ConnList []net.Conn
 
 // 定义版本号
-const Version = "1.0.0"
+const Version = "1.0.1"
 
 func main() {
+	//启动日志
+	SetupLogger()
+	defer CloseLogger()
+
 	showVersion := flag.Bool("version", false, "Show the version number")
 	port := flag.String("port", "5000", "TCP port to listen on")
 	execFile := flag.String("file", "", "Exec file")
@@ -37,16 +42,16 @@ func main() {
 	// 监听端口
 	listener, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
-		fmt.Printf("failed to start listening on the port: %s\n", *port)
+		fmt.Printf("listening at: %s\n", *port)
 		return
 	}
 	defer listener.Close()
-	fmt.Printf("dap started listening at: %s\n", listener.Addr().String())
+	fmt.Printf("started listening at: %s\n", listener.Addr().String())
 
 	// 启动调试器
 	debug, err := createDebugger(*language, *execFile)
 	if err != nil {
-		fmt.Printf("start debug fail, err = %s\n", err)
+		log.Printf("start debug fail, err = %s\n", err)
 		return
 	}
 
@@ -54,10 +59,9 @@ func main() {
 		conn, err := listener.Accept()
 		ConnList = append(ConnList, conn)
 		if err != nil {
-			fmt.Printf("Connection failed: %v\n", err)
+			log.Printf("Connection failed: %v\n", err)
 			continue
 		}
-		fmt.Printf("Accepted connection from %s\n", conn.RemoteAddr().String())
 		// Handle multiple client connections concurrently
 		go handleConnection(conn, debug)
 	}

@@ -6,6 +6,7 @@ import (
 	"github.com/fansqz/go-debugger/debugger"
 	"github.com/google/go-dap"
 	"io"
+	"log"
 	"net"
 	"sync"
 )
@@ -28,14 +29,14 @@ func handleConnection(conn net.Conn, d debugger.Debugger) {
 		err := debugSession.handleRequest()
 		if err != nil {
 			if err == io.EOF {
-				fmt.Printf("No more data to read:", err)
+				log.Printf("No more data to read:", err)
 				break
 			}
-			fmt.Printf("Server error: ", err)
+			log.Printf("Server error: ", err)
 		}
 	}
 
-	fmt.Printf("Closing connection from", conn.RemoteAddr())
+	log.Printf("Closing connection from", conn.RemoteAddr())
 	debugSession.sendWg.Wait()
 	close(debugSession.sendQueue)
 	conn.Close()
