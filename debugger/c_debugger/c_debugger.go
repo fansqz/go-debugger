@@ -286,7 +286,7 @@ func (g *CDebugger) getVariables(reference int) ([]dap.Variable, error) {
 			variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(GetFieldReferenceStruct(refStruct, variable.Name))
 		}
 		// 指针类型，如果有值，但是children又不为0说明是指针类型
-		if variable.Value != "" && g.getChildrenNumber(variable.Name) != 0 {
+		if variable.Value != "" && variable.IndexedVariables != 0 {
 			if variable.Type != "char *" {
 				if g.gdbOutputUtil.isShouldBeFilterAddress(variable.Value) {
 					continue

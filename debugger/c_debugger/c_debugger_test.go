@@ -186,6 +186,49 @@ func TestVariable(t *testing.T) {
 	assert.Equal(t, "stopped", event.GetEvent().Event)
 }
 
+func TestLink(t *testing.T) {
+	workPath := path.Join("/var/fanCode/tempDir", utils.GetUUID())
+	defer os.RemoveAll(workPath)
+
+	// 编译
+	execFile, err := compileFile(workPath, "link.c")
+	assert.Nil(t, err)
+
+	// 创建debugger
+	debug := NewCDebugger()
+	var cha = make(chan dap.EventMessage, 10)
+	err = debug.Start(&debugger.StartOption{
+		ExecFile: execFile,
+		// Callback 事件回调
+		Callback: func(message dap.EventMessage) {
+			cha <- message
+		},
+	})
+	assert.Nil(t, err)
+
+	// 设置断点
+	err = debug.SetBreakpoints(dap.Source{Path: "main.c"}, []dap.SourceBreakpoint{
+		{Line: 28},
+	})
+
+	// 启动调试
+	err = debug.Run()
+	assert.Nil(t, err)
+	_ = <-cha
+	_ = <-cha
+
+	// 测试第一个断点中的变量信息
+	stacks, err := debug.GetStackTrace()
+	assert.Nil(t, err)
+	scopes, err := debug.GetScopes(stacks[0].Id)
+	assert.Nil(t, err)
+	nodes, err := debug.GetVariables(scopes[1].VariablesReference)
+	next, err := debug.getVariables(nodes[0].VariablesReference)
+	next, err = debug.getVariables(next[1].VariablesReference)
+	next, err = debug.getVariables(next[1].VariablesReference)
+	assert.NotNil(t, next)
+}
+
 func getStoppedLine(gdb debugger.Debugger) int {
 	stackTrace, _ := gdb.GetStackTrace()
 	if len(stackTrace) != 0 {
