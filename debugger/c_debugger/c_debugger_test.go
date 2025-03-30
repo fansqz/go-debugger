@@ -1,6 +1,7 @@
 package c_debugger
 
 import (
+	"fmt"
 	"github.com/google/go-dap"
 	"io"
 	"os"
@@ -184,6 +185,10 @@ func TestVariable(t *testing.T) {
 	assert.Equal(t, "continued", event.GetEvent().Event)
 	event = <-cha
 	assert.Equal(t, "stopped", event.GetEvent().Event)
+	stacks, _ = debug.GetStackTrace()
+	scopes, _ = debug.GetScopes(stacks[0].Id)
+	variables, _ := debug.GetVariables(scopes[1].VariablesReference)
+	fmt.Println(variables)
 }
 
 func TestLink(t *testing.T) {

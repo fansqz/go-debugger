@@ -9,6 +9,8 @@ import (
 	"github.com/fansqz/go-debugger/debugger/c_debugger/gdb"
 	"github.com/fansqz/go-debugger/utils/gosync"
 	"github.com/google/go-dap"
+	"log"
+	"regexp"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -351,6 +353,13 @@ func (g *CDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, error
 				}
 			}
 		}
+		// 如果是数组类型，设置value为数组的首地址
+		addr, err := g.checkAndSetArrayAddress(variable)
+		if err != nil {
+			log.Printf("checkAndSetArrayAddress failed: %v\n", err)
+		} else {
+			variable.Value = addr
+		}
 		answer = append(answer, variable)
 	}
 	return answer, nil
@@ -399,6 +408,13 @@ func (g *CDebugger) getGlobalScopeVariables() ([]dap.Variable, error) {
 				}
 			}
 		}
+		// 如果是数组类型，设置value为数组的首地址
+		addr, err := g.checkAndSetArrayAddress(variable)
+		if err != nil {
+			log.Printf("checkAndSetArrayAddress failed: %v\n", err)
+		} else {
+			variable.Value = addr
+		}
 		answer = append(answer, variable)
 	}
 	return answer, nil
@@ -420,6 +436,24 @@ func (g *CDebugger) Terminate() error {
 	g.skipContinuedEventCount = 0
 	g.statusManager.Set(Finish)
 	return nil
+}
+
+func (g *CDebugger) checkAndSetArrayAddress(variable dap.Variable) (string, error) {
+	pattern := `\w+\s*\[\d*\]`
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", err
+	}
+	if re.MatchString(variable.Type) {
+		// 如果是类型是数组类型，需要设置value为地址，用于数组可视化
+		m, err := g.sendWithTimeOut(OptionTimeout, "data-evaluate-expression", "&"+variable.Name)
+		if err != nil {
+			return "", err
+		}
+		payload := g.gdbOutputUtil.getInterfaceFromMap(m, "payload")
+		return g.gdbOutputUtil.getStringFromMap(payload, "value"), nil
+	}
+	return "", nil
 }
 
 // getCurrentThreadId 获取当前线程id
