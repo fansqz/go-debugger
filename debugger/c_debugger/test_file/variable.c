@@ -73,6 +73,7 @@ void manipulatePointers() { // 57
    char* string = "Hello, World!";
 	// 空指针
 	Item* nilPoit;
+	int* intArrayPtr = &intArray;
    // 清理动态分配的内存
    free(dynamicInt);
    free(ptrToColor);

@@ -357,7 +357,7 @@ func (g *CDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, error
 		addr, err := g.checkAndSetArrayAddress(variable)
 		if err != nil {
 			log.Printf("checkAndSetArrayAddress failed: %v\n", err)
-		} else {
+		} else if addr != "" {
 			variable.Value = addr
 		}
 		answer = append(answer, variable)
