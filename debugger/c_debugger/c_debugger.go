@@ -67,6 +67,7 @@ func (g *CDebugger) Start(option *StartOption) error {
 	g.startOption = option
 	gd, err := gdb.New(g.gdbNotificationCallback)
 	if err != nil {
+		log.Printf("Start fail, err = %s\n", err)
 		return err
 	}
 	g.gdb = gd
@@ -88,6 +89,7 @@ func (g *CDebugger) Run() error {
 	}
 	g.preAction = "exec-run"
 	if err := g.gdb.SendAsync(gdbCallback, "exec-run"); err != nil {
+		log.Printf("Run fail, err = %s\n", err)
 		// 启动失败
 		return err
 	}
@@ -103,6 +105,7 @@ func (g *CDebugger) processUserInput(ctx context.Context) {
 			break
 		}
 		if err == nil {
+			log.Printf("processUserInput, err = %s\n", err)
 			if input[len(input)-1] != '\n' {
 				input = input + "\n"
 			}
@@ -209,6 +212,7 @@ func (g *CDebugger) GetStackTrace() ([]dap.StackFrame, error) {
 	}
 	m, err := g.sendWithTimeOut(OptionTimeout, "stack-list-frames")
 	if err != nil {
+		log.Printf("GetStackTrace fail, err = %s\n", err)
 		return nil, err
 	}
 	return g.gdbOutputUtil.parseStackTraceOutput(m), nil
@@ -240,6 +244,7 @@ func (g *CDebugger) getVariables(reference int) ([]dap.Variable, error) {
 	// 解析引用
 	refStruct, err := g.referenceUtil.ParseVariableReference(reference)
 	if err != nil {
+		log.Printf("getVariables failed: %v\n", err)
 		return nil, err
 	}
 
@@ -263,6 +268,7 @@ func (g *CDebugger) getVariables(reference int) ([]dap.Variable, error) {
 			fmt.Sprintf("(%s)%s", refStruct.PointType, refStruct.Address))
 	}
 	if err != nil {
+		log.Printf("getVariables failed: %v\n", err)
 		return nil, err
 	}
 	defer func() {
@@ -277,6 +283,7 @@ func (g *CDebugger) getVariables(reference int) ([]dap.Variable, error) {
 			fmt.Sprintf("%s.%s", name, refStruct.FieldPath))
 	}
 	if err != nil {
+		log.Printf("getVariables fail, err = %s\n", err)
 		return nil, err
 	}
 	answer := make([]dap.Variable, 0, 10)
@@ -318,6 +325,7 @@ func (g *CDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, error
 	m, err := g.sendWithTimeOut(OptionTimeout, "stack-list-variables",
 		"--thread", currentThreadId, "--frame", strconv.Itoa(frameId), "2")
 	if err != nil {
+		log.Printf("getLocalScopeVariables failed: %v\n", err)
 		return nil, err
 	}
 
@@ -376,6 +384,10 @@ func (g *CDebugger) getGlobalScopeVariables() ([]dap.Variable, error) {
 	for _, variable := range variables {
 		// 读取变量值
 		m, err = g.sendWithTimeOut(OptionTimeout, "data-evaluate-expression", variable.Name)
+		if err != nil {
+			log.Printf("getGlobalScopeVariables fail, err = %s\n", err)
+			return nil, err
+		}
 		payload := g.gdbOutputUtil.getInterfaceFromMap(m, "payload")
 		variable.Value = g.gdbOutputUtil.getStringFromMap(payload, "value")
 		// 结构体类型，如果value为空说明是结构体类型
@@ -427,6 +439,7 @@ func (g *CDebugger) Terminate() error {
 	// 发送终端给程序
 	err := g.gdb.Interrupt()
 	if err != nil {
+		log.Printf("Terminate fail, err = %s\n", err)
 		return err
 	}
 	_ = g.gdb.Exit()
@@ -442,12 +455,14 @@ func (g *CDebugger) checkAndSetArrayAddress(variable dap.Variable) (string, erro
 	pattern := `\w+\s*\[\d*\]`
 	re, err := regexp.Compile(pattern)
 	if err != nil {
+		log.Printf("checkAndSetArrayAddress fail, err = %s\n", err)
 		return "", err
 	}
 	if re.MatchString(variable.Type) {
 		// 如果是类型是数组类型，需要设置value为地址，用于数组可视化
 		m, err := g.sendWithTimeOut(OptionTimeout, "data-evaluate-expression", "&"+variable.Name)
 		if err != nil {
+			log.Printf("checkAndSetArrayAddress fail, err = %s\n", err)
 			return "", err
 		}
 		payload := g.gdbOutputUtil.getInterfaceFromMap(m, "payload")
@@ -461,6 +476,7 @@ func (g *CDebugger) getCurrentThreadId() (string, error) {
 	// 获取当前线程id
 	m, err := g.sendWithTimeOut(OptionTimeout, "thread-info")
 	if err != nil {
+		log.Printf("getCurrentThreadId fail, err = %s\n", err)
 		return "", err
 	}
 	threadMap, success := g.gdbOutputUtil.getPayloadFromMap(m)
@@ -533,6 +549,7 @@ func (g *CDebugger) getChildrenNumber(name string) int {
 	}()
 	m, err := g.sendWithTimeOut(OptionTimeout, "var-info-num-children", name)
 	if err != nil {
+		log.Printf("getChildrenNumber fail, err = %s\n", err)
 		return 0
 	}
 	payload, success := g.gdbOutputUtil.getPayloadFromMap(m)
