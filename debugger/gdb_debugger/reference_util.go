@@ -1,4 +1,4 @@
-package c_debugger
+package gdb_debugger
 
 import (
 	"encoding/json"
@@ -8,6 +8,13 @@ import (
 
 const (
 	globalScopeReference = 1001
+)
+
+type ReferenceType string
+
+const (
+	StructType ReferenceType = "v"
+	PointType  ReferenceType = "p"
 )
 
 // ReferenceUtil 在
@@ -20,7 +27,7 @@ type ReferenceUtil struct {
 
 // ReferenceStruct 定义的引用结构体
 type ReferenceStruct struct {
-	Type         string
+	Type         ReferenceType
 	FrameId      string
 	VariableName string
 	PointType    string

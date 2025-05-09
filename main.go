@@ -3,8 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/fansqz/go-debugger/constants"
 	"github.com/fansqz/go-debugger/debugger"
 	"github.com/fansqz/go-debugger/debugger/c_debugger"
+	"github.com/fansqz/go-debugger/debugger/cpp_debugger"
 	"github.com/google/go-dap"
 	"log"
 	"net"
@@ -21,7 +23,7 @@ func main() {
 	defer CloseLogger()
 
 	showVersion := flag.Bool("version", false, "Show the version number")
-	port := flag.String("port", "5000", "TCP port to listen on")
+	port := flag.String("port", "8889", "TCP port to listen on")
 	execFile := flag.String("file", "", "Exec file")
 	language := flag.String("language", "c", "Program language")
 	flag.Parse()
@@ -71,8 +73,10 @@ func main() {
 func createDebugger(language string, execFile string) (debugger.Debugger, error) {
 	var d debugger.Debugger
 	switch language {
-	case "c":
+	case string(constants.LanguageC):
 		d = c_debugger.NewCDebugger()
+	case string(constants.LanguageCpp):
+		d = cpp_debugger.NewCPPDebugger()
 	}
 	err := d.Start(&debugger.StartOption{
 		ExecFile: execFile,

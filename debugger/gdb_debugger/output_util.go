@@ -1,9 +1,11 @@
-package c_debugger
+package gdb_debugger
 
 import (
 	"fmt"
 	"github.com/fansqz/go-debugger/constants"
+	"github.com/fansqz/go-debugger/debugger/gdb_debugger/gdb"
 	"github.com/google/go-dap"
+	"github.com/sirupsen/logrus"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -125,7 +127,7 @@ func (g *GDBOutputUtil) parseStackTraceOutput(m map[string]interface{}) []dap.St
 //	  },
 //	 ]
 //	}
-func (g *GDBOutputUtil) parseFrameVariablesOutput(m map[string]interface{}) []dap.Variable {
+func (g *GDBOutputUtil) parseFrameVariablesOutput(gdb *gdb.Gdb, m map[string]interface{}) []dap.Variable {
 	payload, success := g.getPayloadFromMap(m)
 	if !success {
 		return []dap.Variable{}
@@ -136,15 +138,14 @@ func (g *GDBOutputUtil) parseFrameVariablesOutput(m map[string]interface{}) []da
 	}
 	answer := make([]dap.Variable, 0, 10)
 	for _, v := range variables {
-		variable := dap.Variable{
-			Name: g.convertVariableName(g.getStringFromMap(v, "name")),
-			Type: g.getStringFromMap(v, "type"),
+		name := g.convertVariableName(g.getStringFromMap(v, "name"))
+		m2, err := gdb.SendWithTimeout(OptionTimeout, "var-create", name, "*", name)
+		if err != nil {
+			logrus.Errorf("getChidrenNumber fail err = %s", err)
 		}
-		value := g.getStringFromMap(v, "value")
-		if g.checkKeyFromMap(v, "value") {
-			variable.Value = value
-		}
-		answer = append(answer, variable)
+		variable := g.parseVarCreate(m2)
+		answer = append(answer, *variable)
+		_, _ = gdb.SendWithTimeout(OptionTimeout, "var-delete", name)
 	}
 	return answer
 }
@@ -169,7 +170,7 @@ func (g *GDBOutputUtil) parseFrameVariablesOutput(m map[string]interface{}) []da
 //	 }
 //
 // }
-func (g *GDBOutputUtil) parseGlobalVariableOutput(m map[string]interface{}) []dap.Variable {
+func (g *GDBOutputUtil) parseGlobalVariableOutput(gdb *gdb.Gdb, m map[string]interface{}) []dap.Variable {
 	payload, success := g.getPayloadFromMap(m)
 	if !success {
 		return []dap.Variable{}
@@ -179,14 +180,17 @@ func (g *GDBOutputUtil) parseGlobalVariableOutput(m map[string]interface{}) []da
 	answer := make([]dap.Variable, 0, 10)
 	for _, t := range debug {
 		filename := g.getStringFromMap(t, "filename")
-		if strings.HasSuffix(filename, "main.c") || strings.HasSuffix(filename, "main") {
+		if strings.HasSuffix(filename, "main.c") || strings.HasSuffix(filename, "main.cpp") || strings.HasSuffix(filename, "main") {
 			vars := g.getListFromMap(t, "symbols")
 			for _, v := range vars {
-				field := dap.Variable{
-					Name: g.convertVariableName(g.getStringFromMap(v, "name")),
-					Type: g.getStringFromMap(v, "type"),
+				name := g.convertVariableName(g.getStringFromMap(v, "name"))
+				m2, err := gdb.SendWithTimeout(OptionTimeout, "var-create", name, "*", name)
+				if err != nil {
+					logrus.Errorf("getChidrenNumber fail err = %s", err)
 				}
-				answer = append(answer, field)
+				variable := g.parseVarCreate(m2)
+				answer = append(answer, *variable)
+				_, _ = gdb.SendWithTimeout(OptionTimeout, "var-delete", name)
 			}
 		}
 	}
@@ -210,7 +214,7 @@ func (g *GDBOutputUtil) parseGlobalVariableOutput(m map[string]interface{}) []da
 //	  },
 //	 ]
 //	}
-func (g *GDBOutputUtil) parseVariablesOutput(ref string, m map[string]interface{}) []dap.Variable {
+func (g *GDBOutputUtil) parseVariablesOutput(m map[string]interface{}) []dap.Variable {
 	payload, success := g.getPayloadFromMap(m)
 	if !success {
 		return []dap.Variable{}
@@ -283,6 +287,29 @@ func (g *GDBOutputUtil) parseStoppedEventOutput(m interface{}) *StoppedOutput {
 	}
 }
 
+// parseVarCreate 解析var-create响应
+// class -> done
+//
+//	payload -> {
+//	  name -> name
+//	  numchild -> 50
+//	  value -> [50]
+//	  type -> char [50]
+//	  has_more -> 0
+//	}
+func (g *GDBOutputUtil) parseVarCreate(m map[string]interface{}) *dap.Variable {
+	payload, success := g.getPayloadFromMap(m)
+	if !success {
+		return nil
+	}
+	variable := &dap.Variable{}
+	variable.Name = g.getStringFromMap(payload, "name")
+	variable.Value = g.getStringFromMap(payload, "value")
+	variable.Type = g.getStringFromMap(payload, "type")
+	variable.IndexedVariables = g.getIntFromMap(payload, "numchild")
+	return variable
+}
+
 type StoppedOutput struct {
 	reason constants.StoppedReasonType
 	file   string
@@ -318,6 +345,10 @@ func (g *GDBOutputUtil) isShouldBeFilterAddress(address string) bool {
 }
 
 func (g *GDBOutputUtil) checkIsAddress(value string) bool {
+	// 识别c++中的 std::unique_ptr<Item> = {get() = 0x55555556ceb0}
+	if strings.HasPrefix(value, "std::unique_ptr") {
+		return true
+	}
 	a := strings.Split(value, " ")
 	if len(a) < 1 {
 		return false
@@ -330,13 +361,12 @@ func (g *GDBOutputUtil) checkIsAddress(value string) bool {
 	return re.MatchString(a[0])
 }
 
+// convertValueToAddress 从输入字符串中提取以 0x 开头的十六进制地址
 func (g *GDBOutputUtil) convertValueToAddress(value string) string {
-	i := strings.Index(value, " ")
-	if i == -1 {
-		return value
-	} else {
-		return value[0:i]
-	}
+	// 定义正则表达式模式，用于匹配 0x 开头，后面跟随一位或多位十六进制数字的地址
+	re := regexp.MustCompile(`0x[0-9a-fA-F]+`)
+	match := re.FindString(value)
+	return match
 }
 
 // isNullPoint 判断是否是空指针

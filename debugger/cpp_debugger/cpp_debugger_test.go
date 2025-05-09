@@ -1,4 +1,4 @@
-package c_debugger
+package cpp_debugger
 
 import (
 	"fmt"
@@ -14,16 +14,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestDebug 测试普通调试功能
 func TestDebug(t *testing.T) {
 	var cha = make(chan dap.EventMessage, 10)
 
 	workPath := path.Join("/var/fanCode/tempDir", utils.GetUUID())
 	defer os.RemoveAll(workPath)
 
-	execFile, err := compileFile(workPath, "debug.c")
+	execFile, err := compileFile(workPath, "debug.cpp")
 	assert.Nil(t, err)
-	debug := NewCDebugger()
+	debug := NewCPPDebugger()
 	err = debug.Start(&debugger.StartOption{
 		ExecFile: execFile,
 		// Callback 事件回调
@@ -34,7 +33,7 @@ func TestDebug(t *testing.T) {
 	assert.Nil(t, err)
 
 	// 设置断点
-	err = debug.SetBreakpoints(dap.Source{Path: "main.c"}, []dap.SourceBreakpoint{
+	err = debug.SetBreakpoints(dap.Source{Path: "main.cpp"}, []dap.SourceBreakpoint{
 		{Line: 3},
 		{Line: 7},
 	})
@@ -56,7 +55,7 @@ func TestDebug(t *testing.T) {
 	assert.Equal(t, "continued", event.GetEvent().Event)
 	event = <-cha
 	assert.Equal(t, "stopped", event.GetEvent().Event)
-	assert.Equal(t, getStoppedLine(debug), 5)
+	assert.Equal(t, getStoppedLine(debug), 4)
 
 	// 执行continue
 	err = debug.Continue()
@@ -79,18 +78,17 @@ func TestDebug(t *testing.T) {
 	assert.Equal(t, "terminated", event.GetEvent().Event)
 }
 
-// TestVariable 测试变量获取
 func TestVariable(t *testing.T) {
 
 	workPath := path.Join("/var/fanCode/tempDir", utils.GetUUID())
 	defer os.RemoveAll(workPath)
 
 	// 编译
-	execFile, err := compileFile(workPath, "variable.c")
+	execFile, err := compileFile(workPath, "variable.cpp")
 	assert.Nil(t, err)
 
 	// 创建debugger
-	debug := NewCDebugger()
+	debug := NewCPPDebugger()
 	var cha = make(chan dap.EventMessage, 10)
 	err = debug.Start(&debugger.StartOption{
 		ExecFile: execFile,
@@ -102,9 +100,9 @@ func TestVariable(t *testing.T) {
 	assert.Nil(t, err)
 
 	// 设置断点
-	err = debug.SetBreakpoints(dap.Source{Path: "main.c"}, []dap.SourceBreakpoint{
-		{Line: 55},
-		{Line: 76},
+	err = debug.SetBreakpoints(dap.Source{Path: "main.cpp"}, []dap.SourceBreakpoint{
+		{Line: 64},
+		{Line: 74},
 	})
 	assert.Nil(t, err)
 
@@ -134,26 +132,19 @@ func TestVariable(t *testing.T) {
 		{Name: "globalChar", Value: "65 'A'", Type: "char"},
 		{Name: "globalFloat", Value: "3.1400001", Type: "float"},
 		{Name: "globalInt", Value: "10", Type: "int"},
-		{Name: "globalItem", Value: "", Type: "Item", VariablesReference: 1100, IndexedVariables: 3},
+		{Name: "globalItem", Value: "", Type: "Item", VariablesReference: 1100},
 	}, globalVariables[0:4])
 	assert.Equal(t, []dap.Variable{{Name: "staticGlobalInt", Value: "20", Type: "int"}}, globalVariables[5:6])
 	assert.Equal(t, "globalItemPtr", globalVariables[4].Name)
-	assert.Equal(t, "Item *", globalVariables[4].Type)
+	assert.Equal(t, "std::unique_ptr<Item, std::default_delete<Item> >", globalVariables[4].Type)
 	assert.Equal(t, 1101, globalVariables[4].VariablesReference)
-	globalItem, err := debug.GetVariables(globalVariables[4].VariablesReference)
+	globalItem, err := debug.GetVariables(globalVariables[3].VariablesReference)
 	assert.Nil(t, err)
 	assert.Equal(t, []dap.Variable{
 		{Name: "id", Value: "1", Type: "int"},
 		{Name: "weight", Value: "65.5", Type: "float"},
-		{Name: "color", Value: "RED", Type: "Color"},
+		{Name: "color", Value: "Color::RED", Type: "Color"},
 	}, globalItem)
-	globalItemPtr, err := debug.GetVariables(globalVariables[4].VariablesReference)
-	assert.Nil(t, err)
-	assert.Equal(t, []dap.Variable{
-		{Name: "id", Value: "1", Type: "int"},
-		{Name: "weight", Value: "65.5", Type: "float"},
-		{Name: "color", Value: "RED", Type: "Color"},
-	}, globalItemPtr)
 
 	localVariables, err := debug.GetVariables(scopes[1].VariablesReference)
 	assert.Nil(t, err)
@@ -162,9 +153,9 @@ func TestVariable(t *testing.T) {
 		{Name: "localInt", Value: "5", Type: "int"},
 		{Name: "localChar", Value: "71 'G'", Type: "char"},
 		{Name: "staticLocalFloat", Value: "6.78000021", Type: "float"},
-		{Name: "localItem", Value: "{...}", Type: "Item", VariablesReference: 1102, IndexedVariables: 3},
-		{Name: "localColor", Value: "BLUE", Type: "Color"},
-		{Name: "localValue", Value: "{...}", Type: "Value", VariablesReference: 1103, IndexedVariables: 3},
+		{Name: "localItem", Value: "", Type: "Item", VariablesReference: 1102},
+		{Name: "localColor", Value: "Color::RED", Type: "Color"},
+		{Name: "localValue", Value: "", Type: "Value", VariablesReference: 1103},
 	}, localVariables)
 	localItem, err := debug.GetVariables(localVariables[4].VariablesReference)
 	assert.Nil(t, err)
@@ -193,119 +184,6 @@ func TestVariable(t *testing.T) {
 	fmt.Println(variables)
 }
 
-// TestLink 测试链表算法
-func TestLink(t *testing.T) {
-	workPath := path.Join("/var/fanCode/tempDir", utils.GetUUID())
-	defer os.RemoveAll(workPath)
-
-	// 编译
-	execFile, err := compileFile(workPath, "link.c")
-	assert.Nil(t, err)
-
-	// 创建debugger
-	debug := NewCDebugger()
-	var cha = make(chan dap.EventMessage, 10)
-	err = debug.Start(&debugger.StartOption{
-		ExecFile: execFile,
-		// Callback 事件回调
-		Callback: func(message dap.EventMessage) {
-			cha <- message
-		},
-	})
-	assert.Nil(t, err)
-
-	// 设置断点
-	err = debug.SetBreakpoints(dap.Source{Path: "main.c"}, []dap.SourceBreakpoint{
-		{Line: 28},
-	})
-
-	// 启动调试
-	err = debug.Run()
-	assert.Nil(t, err)
-	_ = <-cha
-	_ = <-cha
-
-	// 测试第一个断点中的变量信息
-	stacks, err := debug.GetStackTrace()
-	assert.Nil(t, err)
-	scopes, err := debug.GetScopes(stacks[0].Id)
-	assert.Nil(t, err)
-	nodes, err := debug.GetVariables(scopes[1].VariablesReference)
-	next, err := debug.GetVariables(nodes[0].VariablesReference)
-	next, err = debug.GetVariables(next[1].VariablesReference)
-	next, err = debug.GetVariables(next[1].VariablesReference)
-	assert.NotNil(t, next)
-}
-
-// TestStruct 测试结构体
-func TestStruct(t *testing.T) {
-	workPath := path.Join("/var/fanCode/tempDir", utils.GetUUID())
-	defer os.RemoveAll(workPath)
-
-	// 编译
-	execFile, err := compileFile(workPath, "struct.c")
-	assert.Nil(t, err)
-
-	// 创建debugger
-	debug := NewCDebugger()
-	var cha = make(chan dap.EventMessage, 10)
-	err = debug.Start(&debugger.StartOption{
-		ExecFile: execFile,
-		// Callback 事件回调
-		Callback: func(message dap.EventMessage) {
-			cha <- message
-		},
-	})
-	assert.Nil(t, err)
-
-	// 设置断点
-	err = debug.SetBreakpoints(dap.Source{Path: "main.c"}, []dap.SourceBreakpoint{
-		{Line: 39},
-	})
-
-	// 启动调试
-	err = debug.Run()
-	assert.Nil(t, err)
-	_ = <-cha
-	_ = <-cha
-
-	// 测试第一个断点中的变量信息
-	stacks, err := debug.GetStackTrace()
-	assert.Nil(t, err)
-	scopes, err := debug.GetScopes(stacks[0].Id)
-	assert.Nil(t, err)
-	checkStudentValue := func(variable dap.Variable) {
-		chidren1, err := debug.GetVariables(variable.VariablesReference)
-		assert.Nil(t, err)
-		assert.Equal(t, "name", chidren1[0].Name)
-		assert.Equal(t, "id", chidren1[1].Name)
-		assert.Equal(t, "birthdate", chidren1[2].Name)
-		studentName, err := debug.GetVariables(chidren1[0].VariablesReference)
-		assert.Equal(t, 50, len(studentName))
-		studentBirthdate, err := debug.GetVariables(chidren1[2].VariablesReference)
-		assert.Equal(t, []dap.Variable{
-			{Name: "year", Value: "2005", Type: "int"},
-			{Name: "month", Value: "3", Type: "int"},
-			{Name: "day", Value: "15", Type: "int"},
-		}, studentBirthdate)
-	}
-	// 读取读取结构体值
-	globals, err := debug.GetVariables(scopes[0].VariablesReference)
-	locals, err := debug.GetVariables(scopes[1].VariablesReference)
-	checkStudentValue(globals[0])
-	checkStudentValue(globals[1])
-	checkStudentValue(locals[0])
-	checkStudentValue(locals[1])
-}
-
-func getStoppedLine(gdb debugger.Debugger) int {
-	stackTrace, _ := gdb.GetStackTrace()
-	if len(stackTrace) != 0 {
-		return stackTrace[0].Line
-	}
-	return 0
-}
-
 // compileFile 开始编译文件
 func compileFile(workPath string, cFile string) (string, error) {
 	// 创建工作目录, 用户的临时文件
@@ -314,7 +192,7 @@ func compileFile(workPath string, cFile string) (string, error) {
 	}
 
 	// 保存待编译文件
-	codeFile := path.Join(workPath, "main.c")
+	codeFile := path.Join(workPath, "main.cpp")
 	code, err := os.ReadFile(path.Join("./test_file", cFile))
 	if err != nil {
 		return "", err
@@ -324,11 +202,20 @@ func compileFile(workPath string, cFile string) (string, error) {
 		return "", err
 	}
 	execFile := path.Join(workPath, "main")
-
-	cmd := exec.Command("gcc", "-g", "-o", execFile, codeFile)
+	//g++ -g -O0 -fsanitize=undefined -fno-omit-frame-pointer
+	cmd := exec.Command("g++", "-g", "-O0", "-gdwarf-4", "-fsanitize=undefined", "-fno-omit-frame-pointer",
+		"-fno-reorder-blocks-and-partition", "-fvar-tracking-assignments", codeFile, "-o", execFile)
 	_, err = cmd.Output()
 	if err != nil {
 		return "", err
 	}
 	return execFile, err
+}
+
+func getStoppedLine(gdb debugger.Debugger) int {
+	stackTrace, _ := gdb.GetStackTrace()
+	if len(stackTrace) != 0 {
+		return stackTrace[0].Line
+	}
+	return 0
 }

@@ -55,6 +55,5 @@ RUN apt-get install -y python3 default-jre
 EXPOSE 8080
 
 # 运行应用程序
-CMD ["/var/go_debugger/godebugger"]
-
+CMD ["/var/go_debugger/godebugger"] 
 
