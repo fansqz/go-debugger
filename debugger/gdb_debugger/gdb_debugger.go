@@ -344,7 +344,7 @@ func (g *GDBDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, err
 	// 获取当前线程id
 	currentThreadId, _ := g.getCurrentThreadId()
 	// 获取栈帧中所有局部变量
-	m, err := g.sendWithTimeOut(OptionTimeout, "stack-list-variables",
+	m, err := g.sendWithTimeOut(OptionTimeout, "stack-list-locals",
 		"--thread", currentThreadId, "--frame", strconv.Itoa(frameId), "--skip-unavailable", "2")
 	if err != nil {
 		log.Printf("getLocalScopeVariables failed: %v\n", err)

@@ -102,7 +102,7 @@ func TestVariable(t *testing.T) {
 	// 设置断点
 	err = debug.SetBreakpoints(dap.Source{Path: "main.cpp"}, []dap.SourceBreakpoint{
 		{Line: 64},
-		{Line: 74},
+		{Line: 89},
 	})
 	assert.Nil(t, err)
 
@@ -164,7 +164,7 @@ func TestVariable(t *testing.T) {
 		{Name: "weight", Value: "42", Type: "float"},
 		{Name: "color", Value: "GREEN", Type: "Color"},
 	}, localItem)
-	localValue, err := debug.GetVariables(localVariables[6].VariablesReference)
+	localValue, err := debug.GetVariables(localVariables[5].VariablesReference)
 	assert.Nil(t, err)
 	assert.Equal(t, []dap.Variable{
 		{Name: "ival", Value: "123", Type: "int"},
@@ -203,7 +203,8 @@ func compileFile(workPath string, cFile string) (string, error) {
 	}
 	execFile := path.Join(workPath, "main")
 	//g++ -g -O0 -fsanitize=undefined -fno-omit-frame-pointer
-	cmd := exec.Command("g++", "-g", "-O0", "-gdwarf-4", "-fsanitize=undefined", "-fno-omit-frame-pointer",
+	cmd := exec.Command("g++", "-g", "-O0",
+		"-ftrivial-auto-var-init=zero", "-fsanitize=undefined", "-fno-omit-frame-pointer",
 		"-fno-reorder-blocks-and-partition", "-fvar-tracking-assignments", codeFile, "-o", execFile)
 	_, err = cmd.Output()
 	if err != nil {
