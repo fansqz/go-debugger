@@ -493,6 +493,7 @@ func (g *GDBDebugger) getLocalVariables2(reference int) ([]dap.Variable, error) 
 		m2, err := g.gdb.SendWithTimeout(OptionTimeout, "var-create", variableName, "*", variableName)
 		if err != nil {
 			logrus.Errorf("getChidrenNumber fail err = %s", err)
+			continue
 		}
 		variable := g.gdbOutputUtil.parseVarCreate(m2)
 		answer = append(answer, *variable)
