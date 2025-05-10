@@ -27,8 +27,13 @@ const (
 type GDBDebugger struct {
 	startOption *StartOption
 
+	// gdb调试的目标语言
 	language constants.LanguageType
-	gdb      *gdb2.Gdb
+	// gdb示例
+	gdb *gdb2.Gdb
+
+	// functionInfos 语法解析解析出来的函数内容，局部变量获取需要通过静态代码分析内容获取变量列表
+	functionInfos []FunctionInfo
 
 	// 引用工具
 	referenceUtil *ReferenceUtil
@@ -70,6 +75,18 @@ func (g *GDBDebugger) Start(option *StartOption) error {
 	// 设置并创建gdb
 	g.callback = option.Callback
 	g.startOption = option
+
+	// 异步进行语法解析
+	if g.startOption.MainCode != "" {
+		go func() {
+			var err error
+			g.functionInfos, err = ParseSourceFile(g.startOption.MainCode)
+			if err != nil {
+				logrus.Errorf("ParseSourceFile fail, err = %v", err)
+			}
+		}()
+	}
+
 	gd, err := gdb2.New(g.gdbNotificationCallback)
 	if err != nil {
 		log.Printf("Start fail, err = %s\n", err)
@@ -261,26 +278,12 @@ func (g *GDBDebugger) GetVariables(reference int) ([]dap.Variable, error) {
 	// 通过scope引用获取变量列表
 	if g.referenceUtil.CheckIsGlobalScope(reference) {
 		variables, err = g.getGlobalScopeVariables()
-		g.checkAndProcessUninitializedObject(variables)
 	} else if g.referenceUtil.CheckIsLocalScope(reference) {
 		variables, err = g.getLocalScopeVariables(reference)
-		g.checkAndProcessUninitializedObject(variables)
 	} else {
 		variables, err = g.getVariables(reference)
 	}
 	return variables, err
-}
-
-// checkAndProcessUninitializedObject 检查未初始化对象，仅检查局部变量和全局变量
-func (g *GDBDebugger) checkAndProcessUninitializedObject(variables []dap.Variable) {
-	for _, variable := range variables {
-		m, _ := g.gdb.SendWithTimeout(OptionTimeout, "data-evaluate-expression", "&"+variable.Name)
-		payload := g.gdbOutputUtil.getInterfaceFromMap(m, "payload")
-		value := g.gdbOutputUtil.getStringFromMap(payload, "value")
-		address := g.gdbOutputUtil.convertValueToAddress(value)
-		m, _ = g.gdb.SendWithTimeout(OptionTimeout, fmt.Sprintf("data-read-memory-bytes %s 16", address))
-		fmt.Println(m)
-	}
 }
 
 func (g *GDBDebugger) getVariables(reference int) ([]dap.Variable, error) {
@@ -327,11 +330,7 @@ func (g *GDBDebugger) getVariables(reference int) ([]dap.Variable, error) {
 				variable.Value = address
 				if !g.gdbOutputUtil.isNullPoint(address) {
 					variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(
-						&ReferenceStruct{
-							Type:         "p",
-							PointType:    variable.Type,
-							Address:      address,
-							VariableName: variable.Name})
+						&ReferenceStruct{Type: "p", PointType: variable.Type, Address: address, VariableName: variable.Name})
 				}
 			}
 		}
@@ -342,28 +341,23 @@ func (g *GDBDebugger) getVariables(reference int) ([]dap.Variable, error) {
 
 func (g *GDBDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, error) {
 	frameId := g.referenceUtil.GetFrameIDByLocalReference(reference)
-	// 获取当前线程id
-	currentThreadId, _ := g.getCurrentThreadId()
-	// 获取栈帧中所有局部变量
-	m, err := g.sendWithTimeOut(OptionTimeout, "stack-list-locals",
-		"--thread", currentThreadId, "--frame", strconv.Itoa(frameId), "--skip-unavailable", "2")
+	var variables []dap.Variable
+	var err error
+	if g.functionInfos != nil {
+		variables, err = g.getLocalVariables2(reference)
+	} else {
+		variables, err = g.getLocalVariables(reference)
+	}
 	if err != nil {
-		log.Printf("getLocalScopeVariables failed: %v\n", err)
 		return nil, err
 	}
-
 	var answer []dap.Variable
-	variables := g.gdbOutputUtil.parseFrameVariablesOutput(g.gdb, m)
 	for _, variable := range variables {
 		// 结构体类型，如果value为空说明是结构体类型
 		if !g.gdbOutputUtil.checkIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			// 如果parentRef不为空，说明是栈帧中的某个结构体变量
 			variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(
-				&ReferenceStruct{
-					Type:         "v",
-					FrameId:      strconv.Itoa(frameId),
-					VariableName: variable.Name,
-				})
+				&ReferenceStruct{Type: "v", FrameId: strconv.Itoa(frameId), VariableName: variable.Name})
 		}
 		// 指针类型，如果有值，但是children又不为0说明是指针类型
 		if g.gdbOutputUtil.checkIsAddress(variable.Value) && variable.IndexedVariables != 0 {
@@ -392,11 +386,10 @@ func (g *GDBDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, err
 }
 
 func (g *GDBDebugger) getGlobalScopeVariables() ([]dap.Variable, error) {
-	m, err := g.sendWithTimeOut(OptionTimeout, "symbol-info-variables", "--max-results", "40")
+	variables, err := g.getGlobalVariables()
 	if err != nil {
 		return nil, err
 	}
-	variables := g.gdbOutputUtil.parseGlobalVariableOutput(g.gdb, m)
 	var answer []dap.Variable
 	// 遍历所有的answer
 	for _, variable := range variables {
@@ -404,11 +397,7 @@ func (g *GDBDebugger) getGlobalScopeVariables() ([]dap.Variable, error) {
 		if !g.gdbOutputUtil.checkIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			// 如果parentRef不为空，说明是栈帧中的某个结构体变量
 			variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(
-				&ReferenceStruct{
-					Type:         "v",
-					FrameId:      "0",
-					VariableName: variable.Name,
-				})
+				&ReferenceStruct{Type: "v", FrameId: "0", VariableName: variable.Name})
 			variable.Value = ""
 		}
 		// 指针类型，如果有值，但是children又不为0说明是指针类型
@@ -433,6 +422,81 @@ func (g *GDBDebugger) getGlobalScopeVariables() ([]dap.Variable, error) {
 			variable.Value = addr
 		}
 		answer = append(answer, variable)
+	}
+	return answer, nil
+}
+
+// getGlobalVariables 获取全局变量列表
+func (g *GDBDebugger) getGlobalVariables() ([]dap.Variable, error) {
+	m, err := g.sendWithTimeOut(OptionTimeout, "symbol-info-variables", "--max-results", "40")
+	if err != nil {
+		return nil, err
+	}
+	variables := g.gdbOutputUtil.parseGlobalVariableOutput(g.gdb, m)
+	return variables, nil
+}
+
+// getLocalVariables 获取本地变量列表1，通过gdb命令获取，会存在有些未初始化变量却被使用情况
+func (g *GDBDebugger) getLocalVariables(reference int) ([]dap.Variable, error) {
+	frameId := g.referenceUtil.GetFrameIDByLocalReference(reference)
+	// 获取当前线程id
+	currentThreadId, _ := g.getCurrentThreadId()
+	// 获取栈帧中所有局部变量
+	m, err := g.sendWithTimeOut(OptionTimeout, "stack-list-locals",
+		"--thread", currentThreadId, "--frame", strconv.Itoa(frameId), "--skip-unavailable", "2")
+	if err != nil {
+		log.Printf("getLocalScopeVariables failed: %v\n", err)
+		return nil, err
+	}
+	variables := g.gdbOutputUtil.parseFrameVariablesOutput(g.gdb, m)
+	return variables, nil
+}
+
+// getLocalVariables2 通过静态代码分析获取
+func (g *GDBDebugger) getLocalVariables2(reference int) ([]dap.Variable, error) {
+	frameId := g.referenceUtil.GetFrameIDByLocalReference(reference)
+	stackTrace, err := g.GetStackTrace()
+	if err != nil {
+		return g.getLocalVariables(reference)
+	}
+	// 找到目标栈帧id
+	var targetFrame dap.StackFrame
+	for _, f := range stackTrace {
+		if f.Id == frameId {
+			targetFrame = f
+			break
+		}
+	}
+	// 获取当前方法
+	var target *FunctionInfo
+	for _, f := range g.functionInfos {
+		if f.Name == targetFrame.Name {
+			target = &f
+			break
+		}
+	}
+	if target == nil {
+		return g.getLocalVariables(reference)
+	}
+
+	// 获取目标变量列表
+	targetVariableNames := []string{}
+	for _, v := range target.Variables {
+		if v.Location.Line < targetFrame.Line {
+			targetVariableNames = append(targetVariableNames, v.Name)
+		}
+	}
+
+	// 读取变量列表
+	var answer []dap.Variable
+	for _, variableName := range targetVariableNames {
+		m2, err := g.gdb.SendWithTimeout(OptionTimeout, "var-create", variableName, "*", variableName)
+		if err != nil {
+			logrus.Errorf("getChidrenNumber fail err = %s", err)
+		}
+		variable := g.gdbOutputUtil.parseVarCreate(m2)
+		answer = append(answer, *variable)
+		_, _ = g.gdb.SendWithTimeout(OptionTimeout, "var-delete", variableName)
 	}
 	return answer, nil
 }

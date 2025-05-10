@@ -1,7 +1,6 @@
-package utils
+package gdb_debugger
 
 import (
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -89,8 +88,7 @@ void manipulatePointers() { // 57
 `
 
 func TestAnalyzeVariables(t *testing.T) {
-	answer, answer2, err := ParseCFile(ContentC)
+	answer, err := ParseSourceFile(ContentC)
 	assert.Nil(t, err)
-	fmt.Println(answer)
-	fmt.Println(answer2)
+	assert.NotEqual(t, 0, len(answer))
 }
