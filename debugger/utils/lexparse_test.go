@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"github.com/fansqz/go-debugger/constants"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -90,7 +89,8 @@ void manipulatePointers() { // 57
 `
 
 func TestAnalyzeVariables(t *testing.T) {
-	answer, err := AnalyzeVariables([]byte(ContentC), constants.LanguageC)
+	answer, answer2, err := ParseCFile(ContentC)
 	assert.Nil(t, err)
 	fmt.Println(answer)
+	fmt.Println(answer2)
 }
