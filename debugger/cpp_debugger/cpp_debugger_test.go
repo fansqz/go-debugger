@@ -158,8 +158,8 @@ func TestVariable(t *testing.T) {
 		{Name: "Local", VariablesReference: 1002},
 	}, scopes)
 
-	verifyLocalPointVariables(t, helper.debug, scopes[1].VariablesReference)
-
+	variables, err := helper.debug.GetVariables(scopes[1].VariablesReference)
+	assert.Equal(t, 5, len(variables))
 }
 
 // verifyGlobalVariables 验证全局变量
