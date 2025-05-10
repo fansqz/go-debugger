@@ -7,6 +7,8 @@ import (
 // StartOption 启动调试的参数
 type StartOption struct {
 	ExecFile string
+	// Main文件代码
+	MainCode string
 	// Callback 事件回调
 	Callback NotificationCallback
 }

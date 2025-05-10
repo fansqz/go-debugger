@@ -5,6 +5,10 @@ import (
 	. "github.com/fansqz/go-debugger/debugger"
 	"github.com/fansqz/go-debugger/debugger/gdb_debugger"
 	"github.com/google/go-dap"
+	"github.com/smacker/go-tree-sitter/javascript"
+	"os"
+	"os/exec"
+	"path"
 	"time"
 )
 
@@ -34,6 +38,7 @@ func (c *CDebugger) Run() error {
 }
 
 func (c *CDebugger) StepOver() error {
+	javascript.GetLanguage()
 	return c.gdbDebugger.StepOver()
 }
 
@@ -67,4 +72,27 @@ func (c *CDebugger) GetVariables(reference int) ([]dap.Variable, error) {
 
 func (c *CDebugger) Terminate() error {
 	return c.gdbDebugger.Terminate()
+}
+
+// CompileCFile 开始编译文件
+func CompileCFile(workPath string, code string) (string, error) {
+	// 创建工作目录, 用户的临时文件
+	if err := os.MkdirAll(workPath, os.ModePerm); err != nil {
+		return "", err
+	}
+
+	// 保存待编译文件
+	codeFile := path.Join(workPath, "main.c")
+	err := os.WriteFile(codeFile, []byte(code), 777)
+	if err != nil {
+		return "", err
+	}
+	execFile := path.Join(workPath, "main")
+
+	cmd := exec.Command("gcc", "-g", "-o", execFile, codeFile)
+	_, err = cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return execFile, err
 }

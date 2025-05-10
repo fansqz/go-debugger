@@ -1,4 +1,4 @@
-package debugger
+package utils
 
 import "sync"
 

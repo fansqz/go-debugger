@@ -7,6 +7,7 @@ import (
 	"github.com/fansqz/go-debugger/constants"
 	. "github.com/fansqz/go-debugger/debugger"
 	gdb2 "github.com/fansqz/go-debugger/debugger/gdb_debugger/gdb"
+	. "github.com/fansqz/go-debugger/debugger/utils"
 	"github.com/fansqz/go-debugger/utils/gosync"
 	"github.com/google/go-dap"
 	"github.com/sirupsen/logrus"

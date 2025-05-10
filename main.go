@@ -7,9 +7,11 @@ import (
 	"github.com/fansqz/go-debugger/debugger"
 	"github.com/fansqz/go-debugger/debugger/c_debugger"
 	"github.com/fansqz/go-debugger/debugger/cpp_debugger"
+	"github.com/fansqz/go-debugger/utils"
 	"github.com/google/go-dap"
 	"log"
 	"net"
+	"path"
 )
 
 var ConnList []net.Conn
@@ -25,6 +27,7 @@ func main() {
 	showVersion := flag.Bool("version", false, "Show the version number")
 	port := flag.String("port", "8889", "TCP port to listen on")
 	execFile := flag.String("file", "", "Exec file")
+	code := flag.String("code", "", "main file code")
 	language := flag.String("language", "c", "Program language")
 	flag.Parse()
 
@@ -33,14 +36,27 @@ func main() {
 		fmt.Printf("Version: %s\n", Version)
 		return
 	}
-	if execFile == nil || *execFile == "" {
-		fmt.Println("exec file cannot be empty")
-		return
-	}
 	if language == nil || *language == "" {
 		fmt.Println("language cannot be empty")
 		return
 	}
+	if code != nil && *code != "" {
+		// 编译文件
+		execFile2, err := compileFile(*language, *code)
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		execFile = &execFile2
+	} else {
+		codeStr := ""
+		code = &codeStr
+	}
+	if execFile == nil || *execFile == "" {
+		fmt.Println("exec file cannot be empty")
+		return
+	}
+
 	// 监听端口
 	listener, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
@@ -51,7 +67,7 @@ func main() {
 	fmt.Printf("started listening at: %s\n", listener.Addr().String())
 
 	// 启动调试器
-	debug, err := createDebugger(*language, *execFile)
+	debug, err := createDebugger(*language, *execFile, *code)
 	if err != nil {
 		log.Printf("start debug fail, err = %s\n", err)
 		return
@@ -70,7 +86,7 @@ func main() {
 }
 
 // createDebugger 创建调试器
-func createDebugger(language string, execFile string) (debugger.Debugger, error) {
+func createDebugger(language string, execFile string, code string) (debugger.Debugger, error) {
 	var d debugger.Debugger
 	switch language {
 	case string(constants.LanguageC):
@@ -80,6 +96,7 @@ func createDebugger(language string, execFile string) (debugger.Debugger, error)
 	}
 	err := d.Start(&debugger.StartOption{
 		ExecFile: execFile,
+		MainCode: code,
 		Callback: func(event dap.EventMessage) {
 			for _, conn := range ConnList {
 				dap.WriteProtocolMessage(conn, event)
@@ -87,4 +104,17 @@ func createDebugger(language string, execFile string) (debugger.Debugger, error)
 		},
 	})
 	return d, err
+}
+
+// 编译文件
+func compileFile(language string, code string) (string, error) {
+	switch language {
+	case string(constants.LanguageC):
+		workPath := path.Join("/var/fanCode/tempDir", utils.GetUUID())
+		return c_debugger.CompileCFile(workPath, code)
+	case string(constants.LanguageCpp):
+		workPath := path.Join("/var/fanCode/tempDir", utils.GetUUID())
+		return cpp_debugger.CompileCPPFile(workPath, code)
+	}
+	return "", fmt.Errorf("language not support")
 }

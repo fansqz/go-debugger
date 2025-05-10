@@ -5,6 +5,9 @@ import (
 	. "github.com/fansqz/go-debugger/debugger"
 	"github.com/fansqz/go-debugger/debugger/gdb_debugger"
 	"github.com/google/go-dap"
+	"os"
+	"os/exec"
+	"path"
 )
 
 type CPPDebugger struct {
@@ -64,4 +67,29 @@ func (c *CPPDebugger) GetVariables(reference int) ([]dap.Variable, error) {
 
 func (c *CPPDebugger) Terminate() error {
 	return c.gdbDebugger.Terminate()
+}
+
+// CompileCPPFile 开始编译文件
+func CompileCPPFile(workPath string, code string) (string, error) {
+	// 创建工作目录, 用户的临时文件
+	if err := os.MkdirAll(workPath, os.ModePerm); err != nil {
+		return "", err
+	}
+
+	// 保存待编译文件
+	codeFile := path.Join(workPath, "main.cpp")
+	err := os.WriteFile(codeFile, []byte(code), 777)
+	if err != nil {
+		return "", err
+	}
+	execFile := path.Join(workPath, "main")
+
+	cmd := exec.Command("g++", "-g", "-O0",
+		"-ftrivial-auto-var-init=zero", "-fsanitize=undefined", "-fno-omit-frame-pointer",
+		"-fno-reorder-blocks-and-partition", "-fvar-tracking-assignments", codeFile, "-o", execFile)
+	_, err = cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return execFile, err
 }
