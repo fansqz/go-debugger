@@ -40,7 +40,7 @@ func main() {
 		fmt.Println("language cannot be empty")
 		return
 	}
-	if code != nil && *code != "" {
+	if code != nil && *code != "" && (execFile == nil || *execFile == "") {
 		// 编译文件
 		execFile2, err := compileFile(*language, *code)
 		if err != nil {
