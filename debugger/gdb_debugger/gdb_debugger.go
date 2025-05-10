@@ -496,6 +496,9 @@ func (g *GDBDebugger) getLocalVariables2(reference int) ([]dap.Variable, error) 
 			continue
 		}
 		variable := g.gdbOutputUtil.parseVarCreate(m2)
+		if variable == nil {
+			continue
+		}
 		answer = append(answer, *variable)
 		_, _ = g.gdb.SendWithTimeout(OptionTimeout, "var-delete", variableName)
 	}
