@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-dap"
 	"log"
 	"net"
+	"os"
 	"path"
 )
 
@@ -27,7 +28,7 @@ func main() {
 	showVersion := flag.Bool("version", false, "Show the version number")
 	port := flag.String("port", "8889", "TCP port to listen on")
 	execFile := flag.String("file", "", "Exec file")
-	code := flag.String("code", "", "main file code")
+	codeFile := flag.String("codeFile", "", "main file code")
 	language := flag.String("language", "c", "Program language")
 	flag.Parse()
 
@@ -40,17 +41,11 @@ func main() {
 		fmt.Println("language cannot be empty")
 		return
 	}
-	if code != nil && *code != "" && (execFile == nil || *execFile == "") {
+	var code string
+	if codeFile != nil && *codeFile != "" {
 		// 编译文件
-		execFile2, err := compileFile(*language, *code)
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-		execFile = &execFile2
-	} else {
-		codeStr := ""
-		code = &codeStr
+		data, _ := os.ReadFile(*codeFile)
+		code = string(data)
 	}
 	if execFile == nil || *execFile == "" {
 		fmt.Println("exec file cannot be empty")
@@ -67,7 +62,7 @@ func main() {
 	fmt.Printf("started listening at: %s\n", listener.Addr().String())
 
 	// 启动调试器
-	debug, err := createDebugger(*language, *execFile, *code)
+	debug, err := createDebugger(*language, *execFile, code)
 	if err != nil {
 		log.Printf("start debug fail, err = %s\n", err)
 		return
