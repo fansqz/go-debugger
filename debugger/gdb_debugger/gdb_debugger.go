@@ -663,7 +663,7 @@ func (g *GDBDebugger) checkIsCppArrayType(targetVariable *dap.Variable) bool {
 	cArrayRegex := regexp.MustCompile(cArrayPattern)
 
 	return stdArrayRegex.MatchString(targetVariable.Type) || cArrayRegex.MatchString(targetVariable.Type) ||
-		strings.Contains(targetVariable.Type, "std::vector"))
+		strings.Contains(targetVariable.Type, "std::vector")
 }
 
 func (g *GDBDebugger) parseObject2Keys(inputStr string) []string {
