@@ -307,6 +307,9 @@ func (g *GDBOutputUtil) parseVarCreate(m map[string]interface{}) *dap.Variable {
 	variable.Value = g.getStringFromMap(payload, "value")
 	variable.Type = g.getStringFromMap(payload, "type")
 	variable.IndexedVariables = g.getIntFromMap(payload, "numchild")
+	if variable.IndexedVariables == 0 {
+		variable.IndexedVariables = g.getIntFromMap(payload, "has_more")
+	}
 	return variable
 }
 

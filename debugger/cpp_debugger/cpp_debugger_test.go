@@ -119,7 +119,7 @@ func TestVariable(t *testing.T) {
 	// 设置断点
 	err := helper.debug.SetBreakpoints(dap.Source{Path: "main.cpp"}, []dap.SourceBreakpoint{
 		{Line: 64},
-		{Line: 81},
+		{Line: 82},
 	})
 	assert.Nil(t, err)
 

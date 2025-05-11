@@ -85,6 +85,7 @@ func CompileCPPFile(workPath string, code string) (string, error) {
 	execFile := path.Join(workPath, "main")
 
 	cmd := exec.Command("g++", "-g", "-O0",
+		"-fno-inline-functions",
 		"-ftrivial-auto-var-init=zero", "-fsanitize=undefined", "-fno-omit-frame-pointer",
 		"-fno-reorder-blocks-and-partition", "-fvar-tracking-assignments", codeFile, "-o", execFile)
 	_, err = cmd.Output()

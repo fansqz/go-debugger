@@ -2,6 +2,7 @@
 #include <string>
 #include <memory>
 #include <array>
+#include <vector>
 // 定义枚举类型，使用 enum class 增强类型安全性
 enum class Color {
     RED,
@@ -77,7 +78,7 @@ void manipulatePointers() {
     Item* ptrToItem = globalItemPtr.get();
     auto ptrToColor = std::make_unique<Color>(Color::BLUE);
     // 数组变量
-    std::array<int, 3> intArray {1, 2, 3};
+    std::vector<int> intArray {1, 2, 3};
     std::array<float, 3> floatArray {1.1f, 2.2f, 3.3f};
     std::array<Color, 3> colorArray {Color::RED, Color::GREEN, Color::BLUE};
     // 字符串，使用 std::string 类型

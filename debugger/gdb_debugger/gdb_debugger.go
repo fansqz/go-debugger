@@ -14,6 +14,7 @@ import (
 	"log"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -586,35 +587,68 @@ func (g *GDBDebugger) varListChildrenForCppStruct(ref *ReferenceStruct) ([]dap.V
 }
 
 func (g *GDBDebugger) varListChildrenForCppArray(ref *ReferenceStruct, targetVariable *dap.Variable) ([]dap.Variable, error) {
-	var arrayLenth int
-	// 模式1: 匹配std::array<T, N>格式
-	stdArrayPattern := `std::array<[^,]+,\s*(\d+)\s*>`
+	var arrayLength int
+
+	// 模式1: 匹配std::array<T, N>格式，同时捕获类型T和长度N
+	stdArrayPattern := `std::array<([^,]+),\s*(\d+)\s*>`
 	stdArrayRegex := regexp.MustCompile(stdArrayPattern)
 	if match := stdArrayRegex.FindStringSubmatch(targetVariable.Type); match != nil {
-		arrayLenth, _ = strconv.Atoi(match[1])
+		arrayLength, _ = strconv.Atoi(match[2])
 	}
-	if arrayLenth == 0 {
-		// 模式2: 匹配arr[N]格式
-		cArrayPattern := `\w+\s*\[\s*(\d+)\s*\]`
+
+	if arrayLength == 0 {
+		// 模式2: 匹配arr[N]格式，尝试从父类型推断元素类型
+		cArrayPattern := `(\w+)\s*\[\s*(\d+)\s*\]`
 		cArrayRegex := regexp.MustCompile(cArrayPattern)
 		if match := cArrayRegex.FindStringSubmatch(targetVariable.Type); match != nil {
-			arrayLenth, _ = strconv.Atoi(match[1])
+			// 尝试从父类型推断元素类型（可能不准确，需要根据实际情况调整）
+			arrayLength, _ = strconv.Atoi(match[2])
+		}
+	}
+	exp := g.getExport(ref)
+	if arrayLength == 0 {
+		// 模式3：匹配std::vector<int, std::allocator<int> > 通过size()获取数组长度
+		if strings.Contains(targetVariable.Type, "std::vector") {
+			m, err := g.gdb.SendWithTimeout(OptionTimeout, "data-evaluate-expression", fmt.Sprintf("%s.size()", exp))
+			if err != nil {
+				log.Printf("varListChildrenForCppArray data-evaluate-expression fail, err = %s\n", err)
+			} else {
+				payload := g.gdbOutputUtil.getInterfaceFromMap(m, "payload")
+				value := g.gdbOutputUtil.getStringFromMap(payload, "value")
+				arrayLength, _ = strconv.Atoi(value)
+			}
+			// 兜底，避免一些函数内联导致size不可用
+			if arrayLength == 0 {
+				var typ string
+				re := regexp.MustCompile(`\bstd::\w+<\s*([^,\s>]+)(?:\s*,|\s*>)`)
+				if match := re.FindStringSubmatch(targetVariable.Type); match != nil {
+					typ = strings.TrimSpace(match[1])
+				}
+				if typ != "" {
+					m, err = g.gdb.SendWithTimeout(OptionTimeout, "data-evaluate-expression", fmt.Sprintf("sizeof(%s)/sizeof(%s)", exp, typ))
+					payload := g.gdbOutputUtil.getInterfaceFromMap(m, "payload")
+					value := g.gdbOutputUtil.getStringFromMap(payload, "value")
+					arrayLength, _ = strconv.Atoi(value)
+				}
+			}
+
 		}
 	}
 
 	answer := []dap.Variable{}
-	exp := g.getExport(ref)
-	for i := 0; i < arrayLenth; i++ {
-		m, err := g.sendWithTimeOut(OptionTimeout, "var-create", "arrayStruct", "*", fmt.Sprintf("%s.%s", exp, i))
+	for i := 0; i < arrayLength; i++ {
+		m, err := g.sendWithTimeOut(OptionTimeout, "var-create", "arrayNameChildren", "*", fmt.Sprintf("%s[%d]", exp, i))
 		if err != nil {
 			log.Printf("varListChildren fail, err = %s\n", err)
 			continue
 		}
 		variable := g.gdbOutputUtil.parseVarCreate(m)
 		if variable != nil {
+			variable.Name = strconv.Itoa(i)
+			// 设置元素类型信息
 			answer = append(answer, *variable)
 		}
-		_, _ = g.sendWithTimeOut(OptionTimeout, "var-delete", "arrayStruct")
+		_, _ = g.sendWithTimeOut(OptionTimeout, "var-delete", "arrayNameChildren")
 	}
 	return answer, nil
 }
@@ -628,7 +662,8 @@ func (g *GDBDebugger) checkIsCppArrayType(targetVariable *dap.Variable) bool {
 	cArrayPattern := `\w+\s*\[\s*(\d+)\s*\]`
 	cArrayRegex := regexp.MustCompile(cArrayPattern)
 
-	return stdArrayRegex.MatchString(targetVariable.Type) || cArrayRegex.MatchString(targetVariable.Type)
+	return stdArrayRegex.MatchString(targetVariable.Type) || cArrayRegex.MatchString(targetVariable.Type) ||
+		strings.Contains(targetVariable.Type, "std::vector"))
 }
 
 func (g *GDBDebugger) parseObject2Keys(inputStr string) []string {
