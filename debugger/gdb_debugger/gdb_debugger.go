@@ -14,7 +14,6 @@ import (
 	"log"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -548,8 +547,16 @@ func (g *GDBDebugger) deleteVar(name string) error {
 	return err
 }
 
-// varListChildren2 c++中var-list-children会因为一些private、public修饰符而无法获取结构体内容
-func (g *GDBDebugger) varListChildren2(ref *ReferenceStruct, structName string) ([]dap.Variable, error) {
+// varListChildrenForCpp c++中var-list-children会因为一些private、public修饰符而无法获取结构体内容，需要特殊处理
+func (g *GDBDebugger) varListChildrenForCpp(ref *ReferenceStruct, targetVariable *dap.Variable) ([]dap.Variable, error) {
+	if !g.checkIsCppArrayType(targetVariable) {
+		return g.varListChildrenForCppStruct(ref)
+	} else {
+		return g.varListChildrenForCppArray(ref, targetVariable)
+	}
+}
+
+func (g *GDBDebugger) varListChildrenForCppStruct(ref *ReferenceStruct) ([]dap.Variable, error) {
 	// 读取结构体值
 	exp := g.getExport(ref)
 	_, _ = g.gdb.SendWithTimeout(OptionTimeout, "enable-pretty-printing")
@@ -578,6 +585,52 @@ func (g *GDBDebugger) varListChildren2(ref *ReferenceStruct, structName string) 
 	return answer, nil
 }
 
+func (g *GDBDebugger) varListChildrenForCppArray(ref *ReferenceStruct, targetVariable *dap.Variable) ([]dap.Variable, error) {
+	var arrayLenth int
+	// 模式1: 匹配std::array<T, N>格式
+	stdArrayPattern := `std::array<[^,]+,\s*(\d+)\s*>`
+	stdArrayRegex := regexp.MustCompile(stdArrayPattern)
+	if match := stdArrayRegex.FindStringSubmatch(targetVariable.Type); match != nil {
+		arrayLenth, _ = strconv.Atoi(match[1])
+	}
+	if arrayLenth == 0 {
+		// 模式2: 匹配arr[N]格式
+		cArrayPattern := `\w+\s*\[\s*(\d+)\s*\]`
+		cArrayRegex := regexp.MustCompile(cArrayPattern)
+		if match := cArrayRegex.FindStringSubmatch(targetVariable.Type); match != nil {
+			arrayLenth, _ = strconv.Atoi(match[1])
+		}
+	}
+
+	answer := []dap.Variable{}
+	exp := g.getExport(ref)
+	for i := 0; i < arrayLenth; i++ {
+		m, err := g.sendWithTimeOut(OptionTimeout, "var-create", "arrayStruct", "*", fmt.Sprintf("%s.%s", exp, i))
+		if err != nil {
+			log.Printf("varListChildren fail, err = %s\n", err)
+			continue
+		}
+		variable := g.gdbOutputUtil.parseVarCreate(m)
+		if variable != nil {
+			answer = append(answer, *variable)
+		}
+		_, _ = g.sendWithTimeOut(OptionTimeout, "var-delete", "arrayStruct")
+	}
+	return answer, nil
+}
+
+func (g *GDBDebugger) checkIsCppArrayType(targetVariable *dap.Variable) bool {
+	// 校验std::array<int, N>格式
+	stdArrayPattern := `std::array<[^,]+,\s*(\d+)\s*>`
+	stdArrayRegex := regexp.MustCompile(stdArrayPattern)
+
+	// 校验arr[N]格式（变量名+方括号数字）
+	cArrayPattern := `\w+\s*\[\s*(\d+)\s*\]`
+	cArrayRegex := regexp.MustCompile(cArrayPattern)
+
+	return stdArrayRegex.MatchString(targetVariable.Type) || cArrayRegex.MatchString(targetVariable.Type)
+}
+
 func (g *GDBDebugger) parseObject2Keys(inputStr string) []string {
 	// 定义正则表达式模式，匹配 = 前面的键
 	re := regexp.MustCompile(`(\w+)\s*=`)
@@ -595,9 +648,9 @@ func (g *GDBDebugger) parseObject2Keys(inputStr string) []string {
 
 // varListChildren 读取变量的children元素列表 ）
 func (g *GDBDebugger) varListChildren(targetVariable *dap.Variable, ref *ReferenceStruct, structName string) ([]dap.Variable, error) {
-	if !strings.Contains(targetVariable.Type, "]") && !strings.Contains(targetVariable.Type, "[") && g.language == constants.LanguageCpp {
+	if g.language == constants.LanguageCpp {
 		// 如果是结构体类型，而且是c++语言，那么需要周varListChildren2
-		return g.varListChildren2(ref, structName)
+		return g.varListChildrenForCpp(ref, targetVariable)
 	}
 	// 获取所有children列表并解析
 	var m map[string]interface{}
