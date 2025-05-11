@@ -150,6 +150,8 @@ func TestVariable(t *testing.T) {
 	assert.Nil(t, err)
 	helper.waitForEvent("continued")
 	helper.waitForEvent("stopped")
+
+	verifyLocalVariables2(t, helper.debug, scopes[1].VariablesReference)
 }
 
 // verifyGlobalVariables 验证全局变量
@@ -188,6 +190,14 @@ func verifyLocalVariables(t *testing.T, debug *CDebugger, ref int) {
 		{Name: "localColor", Value: "BLUE", Type: "Color"},
 		{Name: "localValue", Value: "{...}", Type: "Value", VariablesReference: 1103, IndexedVariables: 3},
 	}, variables)
+}
+
+// verifyLocalVariables2 测试一下数组
+func verifyLocalVariables2(t *testing.T, debug *CDebugger, ref int) {
+	variables, err := debug.GetVariables(ref)
+	variables, err = debug.GetVariables(variables[4].VariablesReference)
+	assert.Nil(t, err)
+	assert.NotEqual(t, 0, len(variables))
 }
 
 // TestLink 测试链表算法
