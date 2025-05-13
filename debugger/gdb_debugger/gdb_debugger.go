@@ -14,7 +14,6 @@ import (
 	"log"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,22 +29,22 @@ type GDBDebugger struct {
 	// gdb调试的目标语言
 	language constants.LanguageType
 	// gdb示例
-	gdb *gdb2.Gdb
+	GDB *gdb2.Gdb
 
 	// functionInfos 语法解析解析出来的函数内容，局部变量获取需要通过静态代码分析内容获取变量列表
 	functionInfos []FunctionInfo
 
 	// 引用工具
-	referenceUtil *ReferenceUtil
+	ReferenceUtil *ReferenceUtil
 
 	// 事件产生时，触发该回调
 	callback NotificationCallback
 
 	// 调试的状态管理
-	statusManager *StatusManager
+	StatusManager *StatusManager
 
 	// gdb输出工具，用于处理gdb输出
-	gdbOutputUtil *GDBOutputUtil
+	GdbOutputUtil *GDBOutputUtil
 
 	// 断点记录
 	mutex             sync.RWMutex
@@ -62,10 +61,10 @@ type GDBDebugger struct {
 
 func NewGDBDebugger(languageType constants.LanguageType) *GDBDebugger {
 	d := &GDBDebugger{
-		statusManager:         NewStatusManager(),
+		StatusManager:         NewStatusManager(),
 		breakpointInitChannel: make(chan struct{}, 2),
-		gdbOutputUtil:         NewGDBOutputUtil(),
-		referenceUtil:         NewReferenceUtil(),
+		GdbOutputUtil:         NewGDBOutputUtil(),
+		ReferenceUtil:         NewReferenceUtil(),
 		language:              languageType,
 	}
 	return d
@@ -92,9 +91,9 @@ func (g *GDBDebugger) Start(option *StartOption) error {
 		log.Printf("Start fail, err = %s\n", err)
 		return err
 	}
-	g.gdb = gd
+	g.GDB = gd
 	// 创建命令
-	m, _ := g.gdb.Send("file-exec-and-symbols", option.ExecFile)
+	m, _ := g.GDB.Send("file-exec-and-symbols", option.ExecFile)
 	if result, ok := m["class"]; ok && result == "done" {
 		return nil
 	} else {
@@ -110,9 +109,9 @@ func (g *GDBDebugger) Run() error {
 		gosync.Go(context.Background(), g.processUserOutput)
 	}
 	// 设置语言
-	_, _ = g.gdb.SendWithTimeout(OptionTimeout, "gdb-set", "language", string(g.language))
+	_, _ = g.GDB.SendWithTimeout(OptionTimeout, "gdb-set", "language", string(g.language))
 	g.preAction = "exec-run"
-	if err := g.gdb.SendAsync(gdbCallback, "exec-run"); err != nil {
+	if err := g.GDB.SendAsync(gdbCallback, "exec-run"); err != nil {
 		log.Printf("Run fail, err = %s\n", err)
 		// 启动失败
 		return err
@@ -125,14 +124,14 @@ func (g *GDBDebugger) processUserInput(ctx context.Context) {
 	var input string
 	for {
 		_, err := fmt.Scanln(&input)
-		if g.statusManager.Is(Finish) {
+		if g.StatusManager.Is(Finish) {
 			break
 		}
 		if err == nil {
 			if input[len(input)-1] != '\n' {
 				input = input + "\n"
 			}
-			g.gdb.Write([]byte(input))
+			g.GDB.Write([]byte(input))
 		}
 		time.Sleep(100 * time.Microsecond)
 	}
@@ -142,7 +141,7 @@ func (g *GDBDebugger) processUserInput(ctx context.Context) {
 func (g *GDBDebugger) processUserOutput(ctx context.Context) {
 	b := make([]byte, 1024)
 	for {
-		n, err := g.gdb.Read(b)
+		n, err := g.GDB.Read(b)
 		if err != nil {
 			return
 		}
@@ -152,7 +151,7 @@ func (g *GDBDebugger) processUserOutput(ctx context.Context) {
 }
 
 func (g *GDBDebugger) StepOver() error {
-	if !g.statusManager.Is(Stopped) {
+	if !g.StatusManager.Is(Stopped) {
 		return errors.New("程序运行中，无法执行单步调试")
 	}
 	return g.stepOver()
@@ -160,12 +159,12 @@ func (g *GDBDebugger) StepOver() error {
 
 func (g *GDBDebugger) stepOver() error {
 	g.preAction = "exec-next"
-	err := g.gdb.SendAsync(func(obj map[string]interface{}) {}, "exec-next")
+	err := g.GDB.SendAsync(func(obj map[string]interface{}) {}, "exec-next")
 	return err
 }
 
 func (g *GDBDebugger) StepIn() error {
-	if !g.statusManager.Is(Stopped) {
+	if !g.StatusManager.Is(Stopped) {
 		return errors.New("程序运行中，无法执行单步调试")
 	}
 	return g.stopIn()
@@ -173,12 +172,12 @@ func (g *GDBDebugger) StepIn() error {
 
 func (g *GDBDebugger) stopIn() error {
 	g.preAction = "exec-step"
-	err := g.gdb.SendAsync(func(obj map[string]interface{}) {}, "exec-step")
+	err := g.GDB.SendAsync(func(obj map[string]interface{}) {}, "exec-step")
 	return err
 }
 
 func (g *GDBDebugger) StepOut() error {
-	if !g.statusManager.Is(Stopped) {
+	if !g.StatusManager.Is(Stopped) {
 		return errors.New("程序运行中，无法执行单步调试")
 	}
 	return g.stopOut()
@@ -186,12 +185,12 @@ func (g *GDBDebugger) StepOut() error {
 
 func (g *GDBDebugger) stopOut() error {
 	g.preAction = "exec-finish"
-	err := g.gdb.SendAsync(func(obj map[string]interface{}) {}, "exec-finish")
+	err := g.GDB.SendAsync(func(obj map[string]interface{}) {}, "exec-finish")
 	return err
 }
 
 func (g *GDBDebugger) Continue() error {
-	if !g.statusManager.Is(Stopped) {
+	if !g.StatusManager.Is(Stopped) {
 		return errors.New("程序运行中，无法执行continue")
 	}
 	return g.continue2()
@@ -199,7 +198,7 @@ func (g *GDBDebugger) Continue() error {
 
 func (g *GDBDebugger) continue2() error {
 	g.preAction = "exec-continue"
-	err := g.gdb.SendAsync(func(obj map[string]interface{}) {}, "exec-continue")
+	err := g.GDB.SendAsync(func(obj map[string]interface{}) {}, "exec-continue")
 	return err
 }
 
@@ -208,11 +207,11 @@ func (g *GDBDebugger) SetBreakpoints(source dap.Source, breakpoints []dap.Source
 	// 删除原来的所有断点
 	g.removeBreakpoints(g.breakpointNumbers)
 	for _, bp := range breakpoints {
-		result, err := g.gdb.SendWithTimeout(OptionTimeout, "break-insert", source.Path+":"+strconv.Itoa(bp.Line))
+		result, err := g.GDB.SendWithTimeout(OptionTimeout, "break-insert", source.Path+":"+strconv.Itoa(bp.Line))
 		if err != nil {
 			continue
 		} else {
-			success, number := g.gdbOutputUtil.parseAddBreakpointOutput(result)
+			success, number := g.GdbOutputUtil.ParseAddBreakpointOutput(result)
 			if success {
 				g.breakpointNumbers = append(g.breakpointNumbers, number)
 			}
@@ -225,32 +224,32 @@ func (g *GDBDebugger) SetBreakpoints(source dap.Source, breakpoints []dap.Source
 func (g *GDBDebugger) removeBreakpoints(numbers []string) error {
 	for _, number := range numbers {
 		var callback gdb2.AsyncCallback = func(m map[string]interface{}) {}
-		g.gdb.SendAsync(callback, "break-delete", number)
+		g.GDB.SendAsync(callback, "break-delete", number)
 	}
 	return nil
 }
 
 func (g *GDBDebugger) Terminate() error {
-	if g.statusManager.Is(Finish) {
+	if g.StatusManager.Is(Finish) {
 		return nil
 	}
 	// 发送终端给程序
-	err := g.gdb.Interrupt()
+	err := g.GDB.Interrupt()
 	if err != nil {
 		log.Printf("Terminate fail, err = %s\n", err)
 		return err
 	}
-	_ = g.gdb.Exit()
+	_ = g.GDB.Exit()
 	// 保证map的线程安全
-	g.gdbOutputUtil.lock.Lock()
-	defer g.gdbOutputUtil.lock.Unlock()
+	g.GdbOutputUtil.lock.Lock()
+	defer g.GdbOutputUtil.lock.Unlock()
 	g.skipContinuedEventCount = 0
-	g.statusManager.Set(Finish)
+	g.StatusManager.Set(Finish)
 	return nil
 }
 
 func (g *GDBDebugger) GetStackTrace() ([]dap.StackFrame, error) {
-	if !g.statusManager.Is(Stopped) {
+	if !g.StatusManager.Is(Stopped) {
 		return nil, errors.New("程序未暂停无法获取栈帧信息")
 	}
 	m, err := g.sendWithTimeOut(OptionTimeout, "stack-list-frames")
@@ -258,28 +257,28 @@ func (g *GDBDebugger) GetStackTrace() ([]dap.StackFrame, error) {
 		log.Printf("GetStackTrace fail, err = %s\n", err)
 		return nil, err
 	}
-	return g.gdbOutputUtil.parseStackTraceOutput(m), nil
+	return g.GdbOutputUtil.ParseStackTraceOutput(m), nil
 }
 
 func (g *GDBDebugger) GetScopes(frameId int) ([]dap.Scope, error) {
 	// 读取栈帧
 	return []dap.Scope{
 		{Name: "Global", VariablesReference: globalScopeReference},
-		{Name: "Local", VariablesReference: g.referenceUtil.GetScopesReference(frameId)},
+		{Name: "Local", VariablesReference: g.ReferenceUtil.GetScopesReference(frameId)},
 	}, nil
 }
 
 func (g *GDBDebugger) GetVariables(reference int) ([]dap.Variable, error) {
-	if !g.statusManager.Is(Stopped) {
+	if !g.StatusManager.Is(Stopped) {
 		return nil, errors.New("程序未暂停变量信息")
 	}
 	var variables []dap.Variable
 	var err error
 	// 通过scope引用获取变量列表
-	if g.referenceUtil.CheckIsGlobalScope(reference) {
-		variables, err = g.getGlobalScopeVariables()
-	} else if g.referenceUtil.CheckIsLocalScope(reference) {
-		variables, err = g.getLocalScopeVariables(reference)
+	if g.ReferenceUtil.CheckIsGlobalScope(reference) {
+		variables, err = g.GetGlobalScopeVariables()
+	} else if g.ReferenceUtil.CheckIsLocalScope(reference) {
+		variables, err = g.GetLocalScopeVariables(reference)
 	} else {
 		variables, err = g.getVariables(reference)
 	}
@@ -288,24 +287,24 @@ func (g *GDBDebugger) GetVariables(reference int) ([]dap.Variable, error) {
 
 func (g *GDBDebugger) getVariables(reference int) ([]dap.Variable, error) {
 	// 解析引用
-	refStruct, err := g.referenceUtil.ParseVariableReference(reference)
+	refStruct, err := g.ReferenceUtil.ParseVariableReference(reference)
 	if err != nil {
 		log.Printf("getVariables failed: %v\n", err)
 		return nil, err
 	}
 
 	// 切换栈帧
-	if err = g.selectFrame(refStruct); err != nil {
+	if err = g.SelectFrame(refStruct); err != nil {
 		return nil, err
 	}
 
 	// 创建变量
 	targetVar := "structName"
-	targetVariable, err := g.createVar(refStruct, targetVar)
+	targetVariable, err := g.CreateVar(refStruct, targetVar)
 	if err != nil {
 		return nil, err
 	}
-	defer g.deleteVar(targetVar)
+	defer g.DeleteVar(targetVar)
 
 	// 读取变量的children元素列表
 	variables, err := g.varListChildren(targetVariable, refStruct, targetVar)
@@ -316,20 +315,20 @@ func (g *GDBDebugger) getVariables(reference int) ([]dap.Variable, error) {
 	answer := make([]dap.Variable, 0, 10)
 	for _, variable := range variables {
 		// 如果value不为指针，且chidren不为0说明是结构体类型
-		if !g.gdbOutputUtil.checkIsAddress(variable.Value) && variable.IndexedVariables != 0 {
+		if !g.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			// 已经定位了的结构体下的某个属性，直接加路径即可。
-			variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(GetFieldReferenceStruct(refStruct, variable.Name))
+			variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(GetFieldReferenceStruct(refStruct, variable.Name))
 		}
 		// value指针且chidren不为0说明是指针类型
-		if g.gdbOutputUtil.checkIsAddress(variable.Value) && variable.IndexedVariables != 0 {
+		if g.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			if variable.Type != "char *" {
-				if g.gdbOutputUtil.isShouldBeFilterAddress(variable.Value) {
+				if g.GdbOutputUtil.IsShouldBeFilterAddress(variable.Value) {
 					continue
 				}
-				address := g.gdbOutputUtil.convertValueToAddress(variable.Value)
+				address := g.GdbOutputUtil.ConvertValueToAddress(variable.Value)
 				variable.Value = address
-				if !g.gdbOutputUtil.isNullPoint(address) {
-					variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(
+				if !g.GdbOutputUtil.IsNullPoint(address) {
+					variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
 						&ReferenceStruct{Type: "p", PointType: variable.Type, Address: address, VariableName: variable.Name})
 				}
 			}
@@ -339,8 +338,8 @@ func (g *GDBDebugger) getVariables(reference int) ([]dap.Variable, error) {
 	return answer, nil
 }
 
-func (g *GDBDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, error) {
-	frameId := g.referenceUtil.GetFrameIDByLocalReference(reference)
+func (g *GDBDebugger) GetLocalScopeVariables(reference int) ([]dap.Variable, error) {
+	frameId := g.ReferenceUtil.GetFrameIDByLocalReference(reference)
 	var variables []dap.Variable
 	var err error
 	if g.functionInfos != nil {
@@ -354,21 +353,21 @@ func (g *GDBDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, err
 	var answer []dap.Variable
 	for _, variable := range variables {
 		// 结构体类型，如果value为空说明是结构体类型
-		if !g.gdbOutputUtil.checkIsAddress(variable.Value) && variable.IndexedVariables != 0 {
+		if !g.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			// 如果parentRef不为空，说明是栈帧中的某个结构体变量
-			variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(
+			variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
 				&ReferenceStruct{Type: "v", FrameId: strconv.Itoa(frameId), VariableName: variable.Name})
 		}
 		// 指针类型，如果有值，但是children又不为0说明是指针类型
-		if g.gdbOutputUtil.checkIsAddress(variable.Value) && variable.IndexedVariables != 0 {
+		if g.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			if variable.Type != "char *" {
-				if g.gdbOutputUtil.isShouldBeFilterAddress(variable.Value) {
+				if g.GdbOutputUtil.IsShouldBeFilterAddress(variable.Value) {
 					continue
 				}
-				address := g.gdbOutputUtil.convertValueToAddress(variable.Value)
+				address := g.GdbOutputUtil.ConvertValueToAddress(variable.Value)
 				variable.Value = address
-				if !g.gdbOutputUtil.isNullPoint(address) {
-					variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(
+				if !g.GdbOutputUtil.IsNullPoint(address) {
+					variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
 						&ReferenceStruct{Type: "p", PointType: variable.Type, Address: address, VariableName: variable.Name})
 				}
 			}
@@ -385,7 +384,7 @@ func (g *GDBDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, err
 	return answer, nil
 }
 
-func (g *GDBDebugger) getGlobalScopeVariables() ([]dap.Variable, error) {
+func (g *GDBDebugger) GetGlobalScopeVariables() ([]dap.Variable, error) {
 	variables, err := g.getGlobalVariables()
 	if err != nil {
 		return nil, err
@@ -394,22 +393,22 @@ func (g *GDBDebugger) getGlobalScopeVariables() ([]dap.Variable, error) {
 	// 遍历所有的answer
 	for _, variable := range variables {
 		// 结构体类型，如果value为空说明是结构体类型
-		if !g.gdbOutputUtil.checkIsAddress(variable.Value) && variable.IndexedVariables != 0 {
+		if !g.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			// 如果parentRef不为空，说明是栈帧中的某个结构体变量
-			variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(
+			variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
 				&ReferenceStruct{Type: "v", FrameId: "0", VariableName: variable.Name})
 			variable.Value = ""
 		}
 		// 指针类型，如果有值，但是children又不为0说明是指针类型
-		if g.gdbOutputUtil.checkIsAddress(variable.Value) && variable.IndexedVariables != 0 {
+		if g.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			if variable.Type != "char *" {
-				if g.gdbOutputUtil.isShouldBeFilterAddress(variable.Value) {
+				if g.GdbOutputUtil.IsShouldBeFilterAddress(variable.Value) {
 					continue
 				}
-				address := g.gdbOutputUtil.convertValueToAddress(variable.Value)
+				address := g.GdbOutputUtil.ConvertValueToAddress(variable.Value)
 				variable.Value = address
-				if !g.gdbOutputUtil.isNullPoint(address) {
-					variable.VariablesReference, _ = g.referenceUtil.CreateVariableReference(
+				if !g.GdbOutputUtil.IsNullPoint(address) {
+					variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
 						&ReferenceStruct{Type: "p", PointType: variable.Type, Address: address, VariableName: variable.Name})
 				}
 			}
@@ -432,13 +431,13 @@ func (g *GDBDebugger) getGlobalVariables() ([]dap.Variable, error) {
 	if err != nil {
 		return nil, err
 	}
-	variables := g.gdbOutputUtil.parseGlobalVariableOutput(g.gdb, m)
+	variables := g.GdbOutputUtil.ParseGlobalVariableOutput(g.GDB, m)
 	return variables, nil
 }
 
 // getLocalVariables 获取本地变量列表1，通过gdb命令获取，会存在有些未初始化变量却被使用情况
 func (g *GDBDebugger) getLocalVariables(reference int) ([]dap.Variable, error) {
-	frameId := g.referenceUtil.GetFrameIDByLocalReference(reference)
+	frameId := g.ReferenceUtil.GetFrameIDByLocalReference(reference)
 	// 获取当前线程id
 	currentThreadId, _ := g.getCurrentThreadId()
 	// 获取栈帧中所有局部变量
@@ -448,13 +447,13 @@ func (g *GDBDebugger) getLocalVariables(reference int) ([]dap.Variable, error) {
 		log.Printf("getLocalScopeVariables failed: %v\n", err)
 		return nil, err
 	}
-	variables := g.gdbOutputUtil.parseFrameVariablesOutput(g.gdb, m)
+	variables := g.GdbOutputUtil.ParseFrameVariablesOutput(g.GDB, m)
 	return variables, nil
 }
 
 // getLocalVariables2 通过静态代码分析获取
 func (g *GDBDebugger) getLocalVariables2(reference int) ([]dap.Variable, error) {
-	frameId := g.referenceUtil.GetFrameIDByLocalReference(reference)
+	frameId := g.ReferenceUtil.GetFrameIDByLocalReference(reference)
 	stackTrace, err := g.GetStackTrace()
 	if err != nil {
 		return g.getLocalVariables(reference)
@@ -490,23 +489,23 @@ func (g *GDBDebugger) getLocalVariables2(reference int) ([]dap.Variable, error) 
 	// 读取变量列表
 	var answer []dap.Variable
 	for _, variableName := range targetVariableNames {
-		m2, err := g.gdb.SendWithTimeout(OptionTimeout, "var-create", variableName, "*", variableName)
+		m2, err := g.GDB.SendWithTimeout(OptionTimeout, "var-create", variableName, "*", variableName)
 		if err != nil {
 			logrus.Errorf("getChidrenNumber fail err = %s", err)
 			continue
 		}
-		variable := g.gdbOutputUtil.parseVarCreate(m2)
+		variable := g.GdbOutputUtil.ParseVarCreate(m2)
 		if variable == nil {
 			continue
 		}
 		answer = append(answer, *variable)
-		_, _ = g.gdb.SendWithTimeout(OptionTimeout, "var-delete", variableName)
+		_, _ = g.GDB.SendWithTimeout(OptionTimeout, "var-delete", variableName)
 	}
 	return answer, nil
 }
 
-// selectFrame 如果是普通类型需要切换栈帧，同一个变量名，可能在不同栈帧中会有重复，需要定位栈帧和变量名称才能读取到变量值
-func (g *GDBDebugger) selectFrame(ref *ReferenceStruct) error {
+// SelectFrame 如果是普通类型需要切换栈帧，同一个变量名，可能在不同栈帧中会有重复，需要定位栈帧和变量名称才能读取到变量值
+func (g *GDBDebugger) SelectFrame(ref *ReferenceStruct) error {
 	if ref.Type == StructType {
 		if _, err := g.sendWithTimeOut(OptionTimeout, "stack-select-frame", ref.FrameId); err != nil {
 			return err
@@ -515,21 +514,21 @@ func (g *GDBDebugger) selectFrame(ref *ReferenceStruct) error {
 	return nil
 }
 
-// createVar 创建变量，在读取一个值的时候，需要创建变量以后才能读取
-func (g *GDBDebugger) createVar(ref *ReferenceStruct, structName string) (*dap.Variable, error) {
-	_, _ = g.gdb.SendWithTimeout(OptionTimeout, "enable-pretty-printing")
-	exp := g.getExport(ref)
+// CreateVar 创建变量，在读取一个值的时候，需要创建变量以后才能读取
+func (g *GDBDebugger) CreateVar(ref *ReferenceStruct, structName string) (*dap.Variable, error) {
+	_, _ = g.GDB.SendWithTimeout(OptionTimeout, "enable-pretty-printing")
+	exp := g.GetExport(ref)
 	m, err := g.sendWithTimeOut(OptionTimeout, "var-create", structName, "*", exp)
 	if err != nil {
 		logrus.Errorf("create var fail %s", err)
 		return nil, err
 	}
-	variable := g.gdbOutputUtil.parseVarCreate(m)
+	variable := g.GdbOutputUtil.ParseVarCreate(m)
 	return variable, nil
 }
 
 // getExport 通过ReferenceStruct，获取变量表达式
-func (g *GDBDebugger) getExport(ref *ReferenceStruct) string {
+func (g *GDBDebugger) GetExport(ref *ReferenceStruct) string {
 	var exp string
 	if ref.Type == "v" {
 		exp = ref.VariableName
@@ -542,40 +541,10 @@ func (g *GDBDebugger) getExport(ref *ReferenceStruct) string {
 	return exp
 }
 
-// deleteVar 删除变量，创建完变量需要进行删除，避免再次创建时名称重复
-func (g *GDBDebugger) deleteVar(name string) error {
+// DeleteVar 删除变量，创建完变量需要进行删除，避免再次创建时名称重复
+func (g *GDBDebugger) DeleteVar(name string) error {
 	_, err := g.sendWithTimeOut(OptionTimeout, "var-delete", name)
 	return err
-}
-
-// varListChildren2 c++中var-list-children会因为一些private、public修饰符而无法获取结构体内容
-func (g *GDBDebugger) varListChildren2(ref *ReferenceStruct, structName string) ([]dap.Variable, error) {
-	// 读取结构体值
-	exp := g.getExport(ref)
-	_, _ = g.gdb.SendWithTimeout(OptionTimeout, "enable-pretty-printing")
-	m, err := g.sendWithTimeOut(OptionTimeout, "data-evaluate-expression", exp)
-	if err != nil {
-		log.Printf("varListChildren fail, err = %s\n", err)
-		return nil, err
-	}
-	payload := g.gdbOutputUtil.getInterfaceFromMap(m, "payload")
-	value := g.gdbOutputUtil.getStringFromMap(payload, "value")
-	keys := g.parseObject2Keys(value)
-
-	answer := []dap.Variable{}
-	for _, key := range keys {
-		m, err = g.sendWithTimeOut(OptionTimeout, "var-create", key, "*", fmt.Sprintf("(%s).%s", exp, key))
-		if err != nil {
-			log.Printf("varListChildren fail, err = %s\n", err)
-			continue
-		}
-		variable := g.gdbOutputUtil.parseVarCreate(m)
-		if variable != nil {
-			answer = append(answer, *variable)
-		}
-		_, _ = g.sendWithTimeOut(OptionTimeout, "var-delete", key)
-	}
-	return answer, nil
 }
 
 func (g *GDBDebugger) parseObject2Keys(inputStr string) []string {
@@ -595,10 +564,6 @@ func (g *GDBDebugger) parseObject2Keys(inputStr string) []string {
 
 // varListChildren 读取变量的children元素列表 ）
 func (g *GDBDebugger) varListChildren(targetVariable *dap.Variable, ref *ReferenceStruct, structName string) ([]dap.Variable, error) {
-	if !strings.Contains(targetVariable.Type, "]") && !strings.Contains(targetVariable.Type, "[") && g.language == constants.LanguageCpp {
-		// 如果是结构体类型，而且是c++语言，那么需要周varListChildren2
-		return g.varListChildren2(ref, structName)
-	}
 	// 获取所有children列表并解析
 	var m map[string]interface{}
 	var err error
@@ -607,7 +572,7 @@ func (g *GDBDebugger) varListChildren(targetVariable *dap.Variable, ref *Referen
 		log.Printf("getVariables fail, err = %s\n", err)
 		return nil, err
 	}
-	variables := g.gdbOutputUtil.parseVariablesOutput(m)
+	variables := g.GdbOutputUtil.ParseVariablesOutput(m)
 	return variables, nil
 }
 
@@ -625,8 +590,8 @@ func (g *GDBDebugger) checkAndSetArrayAddress(variable dap.Variable) (string, er
 			log.Printf("checkAndSetArrayAddress fail, err = %s\n", err)
 			return "", err
 		}
-		payload := g.gdbOutputUtil.getInterfaceFromMap(m, "payload")
-		return g.gdbOutputUtil.getStringFromMap(payload, "value"), nil
+		payload := g.GdbOutputUtil.GetInterfaceFromMap(m, "payload")
+		return g.GdbOutputUtil.GetStringFromMap(payload, "value"), nil
 	}
 	return "", nil
 }
@@ -639,28 +604,28 @@ func (g *GDBDebugger) getCurrentThreadId() (string, error) {
 		log.Printf("getCurrentThreadId fail, err = %s\n", err)
 		return "", err
 	}
-	threadMap, success := g.gdbOutputUtil.getPayloadFromMap(m)
+	threadMap, success := g.GdbOutputUtil.GetPayloadFromMap(m)
 	if !success {
 		return "", errors.New("获取线程id失败")
 	}
-	currentThreadId := g.gdbOutputUtil.getStringFromMap(threadMap, "current-thread-id")
+	currentThreadId := g.GdbOutputUtil.GetStringFromMap(threadMap, "current-thread-id")
 	return currentThreadId, nil
 }
 
 // gdbNotificationCallback 处理gdb异步响应的回调
 func (g *GDBDebugger) gdbNotificationCallback(m map[string]interface{}) {
-	typ := g.gdbOutputUtil.getStringFromMap(m, "type")
+	typ := g.GdbOutputUtil.GetStringFromMap(m, "type")
 	switch typ {
 	case "exec":
-		class := g.gdbOutputUtil.getStringFromMap(m, "class")
+		class := g.GdbOutputUtil.GetStringFromMap(m, "class")
 		switch class {
 		case "stopped":
 			// 处理程序停止的事件
-			g.processStoppedData(g.gdbOutputUtil.getInterfaceFromMap(m, "payload"))
-			g.statusManager.Set(Stopped)
+			g.processStoppedData(g.GdbOutputUtil.GetInterfaceFromMap(m, "payload"))
+			g.StatusManager.Set(Stopped)
 		case "running":
 			g.processRunningData()
-			g.statusManager.Set(Running)
+			g.StatusManager.Set(Running)
 		}
 	}
 
@@ -668,7 +633,7 @@ func (g *GDBDebugger) gdbNotificationCallback(m map[string]interface{}) {
 
 // processStoppedData 处理gdb返回的stopped数据，程序停止到程序的某个位置就会返回stopped data
 func (g *GDBDebugger) processStoppedData(m interface{}) {
-	stoppedOutput := g.gdbOutputUtil.parseStoppedEventOutput(m)
+	stoppedOutput := g.GdbOutputUtil.ParseStoppedEventOutput(m)
 	// 停留在断点
 	if stoppedOutput.reason == constants.StepStopped || stoppedOutput.reason == constants.BreakpointStopped {
 		// 返回停留的断点位置
@@ -698,7 +663,7 @@ func (g *GDBDebugger) processRunningData() {
 		Body:  dap.ContinuedEventBody{},
 	})
 	// 设置用户程序为执行状态
-	g.statusManager.Set(Running)
+	g.StatusManager.Set(Running)
 }
 
 // getChildrenNumber 获取children数量
@@ -711,7 +676,7 @@ func (g *GDBDebugger) getChildrenNumber(name string) int {
 	defer func() {
 		_, _ = g.sendWithTimeOut(OptionTimeout, "var-delete", name)
 	}()
-	v := g.gdbOutputUtil.parseVarCreate(m)
+	v := g.GdbOutputUtil.ParseVarCreate(m)
 	if v != nil {
 		return v.IndexedVariables
 	}
@@ -721,7 +686,7 @@ func (g *GDBDebugger) getChildrenNumber(name string) int {
 func (g *GDBDebugger) sendWithTimeOut(timeout time.Duration, operation string, args ...string) (map[string]interface{}, error) {
 	channel := make(chan map[string]interface{}, 1)
 
-	err := g.gdb.SendAsync(func(obj map[string]interface{}) {
+	err := g.GDB.SendAsync(func(obj map[string]interface{}) {
 		channel <- obj
 	}, operation, args...)
 	if err != nil {

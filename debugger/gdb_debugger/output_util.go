@@ -23,7 +23,7 @@ func NewGDBOutputUtil() *GDBOutputUtil {
 	return &GDBOutputUtil{}
 }
 
-// parseAddBreakpointOutput 解析添加断点输出
+// ParseAddBreakpointOutput 解析添加断点输出
 // class->done
 //
 //	payload->{
@@ -41,9 +41,9 @@ func NewGDBOutputUtil() *GDBOutputUtil {
 //			  times -> 0
 //			  original-location -> /var/fanCode/tempDir/56370c2d-6d34-11ef-9e80-5a7990d94760/main.c:43
 //			}
-func (g *GDBOutputUtil) parseAddBreakpointOutput(m map[string]interface{}) (bool, string) {
+func (g *GDBOutputUtil) ParseAddBreakpointOutput(m map[string]interface{}) (bool, string) {
 	// 处理响应
-	bkpts, success := g.getPayloadFromMap(m)
+	bkpts, success := g.GetPayloadFromMap(m)
 	if !success {
 		return false, ""
 	}
@@ -56,22 +56,22 @@ func (g *GDBOutputUtil) parseAddBreakpointOutput(m map[string]interface{}) (bool
 		}
 	}
 	// 设置map
-	number := g.getStringFromMap(breakpoint, "number")
+	number := g.GetStringFromMap(breakpoint, "number")
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	return true, number
 }
 
-// parseRemoveBreakpointOutput 解析移除断点输出
+// ParseRemoveBreakpointOutput 解析移除断点输出
 // class -> done
-func (g *GDBOutputUtil) parseRemoveBreakpointOutput(m map[string]interface{}) bool {
-	if class := g.getStringFromMap(m, "class"); class == "done" {
+func (g *GDBOutputUtil) ParseRemoveBreakpointOutput(m map[string]interface{}) bool {
+	if class := g.GetStringFromMap(m, "class"); class == "done" {
 		return true
 	}
 	return false
 }
 
-// parseStackTraceOutput 解析栈帧输出
+// ParseStackTraceOutput 解析栈帧输出
 // class->done
 //
 //	payload-> {
@@ -88,19 +88,19 @@ func (g *GDBOutputUtil) parseRemoveBreakpointOutput(m map[string]interface{}) bo
 //	  }
 //	 ]
 //	}
-func (g *GDBOutputUtil) parseStackTraceOutput(m map[string]interface{}) []dap.StackFrame {
+func (g *GDBOutputUtil) ParseStackTraceOutput(m map[string]interface{}) []dap.StackFrame {
 	answer := make([]dap.StackFrame, 0, 5)
-	stackMap, success := g.getPayloadFromMap(m)
+	stackMap, success := g.GetPayloadFromMap(m)
 	if !success {
 		return []dap.StackFrame{}
 	}
-	stackList := g.getListFromMap(stackMap, "stack")
+	stackList := g.GetListFromMap(stackMap, "stack")
 	for _, s := range stackList {
-		frame := g.getInterfaceFromMap(s, "frame")
-		id, _ := strconv.Atoi(g.getStringFromMap(frame, "level"))
-		fun := g.getStringFromMap(frame, "func")
-		line := g.getIntFromMap(frame, "line")
-		fullname := g.getStringFromMap(frame, "fullname")
+		frame := g.GetInterfaceFromMap(s, "frame")
+		id, _ := strconv.Atoi(g.GetStringFromMap(frame, "level"))
+		fun := g.GetStringFromMap(frame, "func")
+		line := g.GetIntFromMap(frame, "line")
+		fullname := g.GetStringFromMap(frame, "fullname")
 		stack := dap.StackFrame{
 			Id:   id,
 			Name: fun,
@@ -115,7 +115,7 @@ func (g *GDBOutputUtil) parseStackTraceOutput(m map[string]interface{}) []dap.St
 	return answer
 }
 
-// parseFrameVariablesOutput 解析获取栈帧变量列表的输出
+// ParseFrameVariablesOutput 解析获取栈帧变量列表的输出
 // class->done
 //
 //	payload->{
@@ -127,30 +127,30 @@ func (g *GDBOutputUtil) parseStackTraceOutput(m map[string]interface{}) []dap.St
 //	  },
 //	 ]
 //	}
-func (g *GDBOutputUtil) parseFrameVariablesOutput(gdb *gdb.Gdb, m map[string]interface{}) []dap.Variable {
-	payload, success := g.getPayloadFromMap(m)
+func (g *GDBOutputUtil) ParseFrameVariablesOutput(gdb *gdb.Gdb, m map[string]interface{}) []dap.Variable {
+	payload, success := g.GetPayloadFromMap(m)
 	if !success {
 		return []dap.Variable{}
 	}
-	variables := g.getListFromMap(payload, "variables")
+	variables := g.GetListFromMap(payload, "variables")
 	if variables == nil {
-		variables = g.getListFromMap(payload, "locals")
+		variables = g.GetListFromMap(payload, "locals")
 	}
 	answer := make([]dap.Variable, 0, 10)
 	for _, v := range variables {
-		name := g.convertVariableName(g.getStringFromMap(v, "name"))
+		name := g.ConvertVariableName(g.GetStringFromMap(v, "name"))
 		m2, err := gdb.SendWithTimeout(OptionTimeout, "var-create", name, "*", name)
 		if err != nil {
 			logrus.Errorf("getChidrenNumber fail err = %s", err)
 		}
-		variable := g.parseVarCreate(m2)
+		variable := g.ParseVarCreate(m2)
 		answer = append(answer, *variable)
 		_, _ = gdb.SendWithTimeout(OptionTimeout, "var-delete", name)
 	}
 	return answer
 }
 
-// parseGlobalVariableOutput 解析全局变量获取的输出
+// ParseGlobalVariableOutput 解析全局变量获取的输出
 // class -> done
 //
 //	payload -> {
@@ -170,25 +170,25 @@ func (g *GDBOutputUtil) parseFrameVariablesOutput(gdb *gdb.Gdb, m map[string]int
 //	 }
 //
 // }
-func (g *GDBOutputUtil) parseGlobalVariableOutput(gdb *gdb.Gdb, m map[string]interface{}) []dap.Variable {
-	payload, success := g.getPayloadFromMap(m)
+func (g *GDBOutputUtil) ParseGlobalVariableOutput(gdb *gdb.Gdb, m map[string]interface{}) []dap.Variable {
+	payload, success := g.GetPayloadFromMap(m)
 	if !success {
 		return []dap.Variable{}
 	}
-	symbols := g.getInterfaceFromMap(payload, "symbols")
-	debug := g.getListFromMap(symbols, "debug")
+	symbols := g.GetInterfaceFromMap(payload, "symbols")
+	debug := g.GetListFromMap(symbols, "debug")
 	answer := make([]dap.Variable, 0, 10)
 	for _, t := range debug {
-		filename := g.getStringFromMap(t, "filename")
+		filename := g.GetStringFromMap(t, "filename")
 		if strings.HasSuffix(filename, "main.c") || strings.HasSuffix(filename, "main.cpp") || strings.HasSuffix(filename, "main") {
-			vars := g.getListFromMap(t, "symbols")
+			vars := g.GetListFromMap(t, "symbols")
 			for _, v := range vars {
-				name := g.convertVariableName(g.getStringFromMap(v, "name"))
+				name := g.ConvertVariableName(g.GetStringFromMap(v, "name"))
 				m2, err := gdb.SendWithTimeout(OptionTimeout, "var-create", name, "*", name)
 				if err != nil {
 					logrus.Errorf("getChidrenNumber fail err = %s", err)
 				}
-				variable := g.parseVarCreate(m2)
+				variable := g.ParseVarCreate(m2)
 				answer = append(answer, *variable)
 				_, _ = gdb.SendWithTimeout(OptionTimeout, "var-delete", name)
 			}
@@ -197,7 +197,7 @@ func (g *GDBOutputUtil) parseGlobalVariableOutput(gdb *gdb.Gdb, m map[string]int
 	return answer
 }
 
-// parseVariablesOutput 解析获取变量内容的output
+// ParseVariablesOutput 解析获取变量内容的output
 // class->done
 //
 //	payload->{
@@ -214,32 +214,32 @@ func (g *GDBOutputUtil) parseGlobalVariableOutput(gdb *gdb.Gdb, m map[string]int
 //	  },
 //	 ]
 //	}
-func (g *GDBOutputUtil) parseVariablesOutput(m map[string]interface{}) []dap.Variable {
-	payload, success := g.getPayloadFromMap(m)
+func (g *GDBOutputUtil) ParseVariablesOutput(m map[string]interface{}) []dap.Variable {
+	payload, success := g.GetPayloadFromMap(m)
 	if !success {
 		return []dap.Variable{}
 	}
-	children := g.getListFromMap(payload, "children")
+	children := g.GetListFromMap(payload, "children")
 	answer := make([]dap.Variable, 0, 10)
 	for _, v := range children {
-		v = g.getInterfaceFromMap(v, "child")
+		v = g.GetInterfaceFromMap(v, "child")
 		field := dap.Variable{
-			Name: g.convertVariableName(g.getStringFromMap(v, "name")),
-			Type: g.getStringFromMap(v, "type"),
+			Name: g.ConvertVariableName(g.GetStringFromMap(v, "name")),
+			Type: g.GetStringFromMap(v, "type"),
 		}
-		if g.checkKeyFromMap(v, "value") {
-			value := g.getStringFromMap(v, "value")
+		if g.CheckKeyFromMap(v, "value") {
+			value := g.GetStringFromMap(v, "value")
 			field.Value = value
 		}
-		if g.checkKeyFromMap(v, "numchild") {
-			field.IndexedVariables = g.getIntFromMap(v, "numchild")
+		if g.CheckKeyFromMap(v, "numchild") {
+			field.IndexedVariables = g.GetIntFromMap(v, "numchild")
 		}
 		answer = append(answer, field)
 	}
 	return answer
 }
 
-// parseBreakpointHitEventOutput 解析stopped事件中，停留在断点的event输出
+// ParseBreakpointHitEventOutput 解析stopped事件中，停留在断点的event输出
 // reason->breakpoint-hit
 // disp->keep
 // bkptno->1
@@ -256,12 +256,12 @@ func (g *GDBOutputUtil) parseVariablesOutput(m map[string]interface{}) []dap.Var
 // thread-id->1
 // stopped-threads->all
 // core->4
-func (g *GDBOutputUtil) parseStoppedEventOutput(m interface{}) *StoppedOutput {
-	r := g.getStringFromMap(m, "reason")
+func (g *GDBOutputUtil) ParseStoppedEventOutput(m interface{}) *StoppedOutput {
+	r := g.GetStringFromMap(m, "reason")
 	if r == "breakpoint-hit" {
-		frame := g.getInterfaceFromMap(m, "frame")
-		fullname := g.getStringFromMap(frame, "fullname")
-		lineStr := g.getStringFromMap(frame, "line")
+		frame := g.GetInterfaceFromMap(m, "frame")
+		fullname := g.GetStringFromMap(frame, "fullname")
+		lineStr := g.GetStringFromMap(frame, "line")
 		line, _ := strconv.Atoi(lineStr)
 		return &StoppedOutput{
 			reason: constants.BreakpointStopped,
@@ -269,9 +269,9 @@ func (g *GDBOutputUtil) parseStoppedEventOutput(m interface{}) *StoppedOutput {
 			line:   line,
 		}
 	} else if r == "end-stepping-range" || r == "function-finished" {
-		frame := g.getInterfaceFromMap(m, "frame")
-		fullname := g.getStringFromMap(frame, "fullname")
-		lineStr := g.getStringFromMap(frame, "line")
+		frame := g.GetInterfaceFromMap(m, "frame")
+		fullname := g.GetStringFromMap(frame, "fullname")
+		lineStr := g.GetStringFromMap(frame, "line")
 		line, _ := strconv.Atoi(lineStr)
 		return &StoppedOutput{
 			reason: constants.StepStopped,
@@ -287,7 +287,7 @@ func (g *GDBOutputUtil) parseStoppedEventOutput(m interface{}) *StoppedOutput {
 	}
 }
 
-// parseVarCreate 解析var-create响应
+// ParseVarCreate 解析var-create响应
 // class -> done
 //
 //	payload -> {
@@ -297,16 +297,19 @@ func (g *GDBOutputUtil) parseStoppedEventOutput(m interface{}) *StoppedOutput {
 //	  type -> char [50]
 //	  has_more -> 0
 //	}
-func (g *GDBOutputUtil) parseVarCreate(m map[string]interface{}) *dap.Variable {
-	payload, success := g.getPayloadFromMap(m)
+func (g *GDBOutputUtil) ParseVarCreate(m map[string]interface{}) *dap.Variable {
+	payload, success := g.GetPayloadFromMap(m)
 	if !success {
 		return nil
 	}
 	variable := &dap.Variable{}
-	variable.Name = g.getStringFromMap(payload, "name")
-	variable.Value = g.getStringFromMap(payload, "value")
-	variable.Type = g.getStringFromMap(payload, "type")
-	variable.IndexedVariables = g.getIntFromMap(payload, "numchild")
+	variable.Name = g.GetStringFromMap(payload, "name")
+	variable.Value = g.GetStringFromMap(payload, "value")
+	variable.Type = g.GetStringFromMap(payload, "type")
+	variable.IndexedVariables = g.GetIntFromMap(payload, "numchild")
+	if variable.IndexedVariables == 0 {
+		variable.IndexedVariables = g.GetIntFromMap(payload, "has_more")
+	}
 	return variable
 }
 
@@ -321,7 +324,7 @@ type StoppedOutput struct {
 // 比如获取一个结构体的属性，属性名：localItem.id  ->  id
 // 解引用情况：dynamicInt.*(int *)0x555555602260 -> *dynamicInt
 // 数组情况：array.0 -> 0
-func (g *GDBOutputUtil) convertVariableName(variableName string) string {
+func (g *GDBOutputUtil) ConvertVariableName(variableName string) string {
 	index := strings.LastIndex(variableName, ".")
 	if index == -1 {
 		return variableName
@@ -336,7 +339,7 @@ func (g *GDBOutputUtil) convertVariableName(variableName string) string {
 }
 
 // isShouldBeFilterAddress gdb在读取一些变量的时候，会读取到一些初始的数据，需要过滤掉这些数据
-func (g *GDBOutputUtil) isShouldBeFilterAddress(address string) bool {
+func (g *GDBOutputUtil) IsShouldBeFilterAddress(address string) bool {
 	if strings.HasSuffix(address, "<_start>") {
 		return true
 	}
@@ -344,7 +347,7 @@ func (g *GDBOutputUtil) isShouldBeFilterAddress(address string) bool {
 	return re.MatchString(address)
 }
 
-func (g *GDBOutputUtil) checkIsAddress(value string) bool {
+func (g *GDBOutputUtil) CheckIsAddress(value string) bool {
 	// 识别c++中的 std::unique_ptr<Item> = {get() = 0x55555556ceb0}
 	if strings.HasPrefix(value, "std::unique_ptr") {
 		return true
@@ -362,16 +365,16 @@ func (g *GDBOutputUtil) checkIsAddress(value string) bool {
 }
 
 // convertValueToAddress 从输入字符串中提取以 0x 开头的十六进制地址
-func (g *GDBOutputUtil) convertValueToAddress(value string) string {
+func (g *GDBOutputUtil) ConvertValueToAddress(value string) string {
 	// 定义正则表达式模式，用于匹配 0x 开头，后面跟随一位或多位十六进制数字的地址
 	re := regexp.MustCompile(`0x[0-9a-fA-F]+`)
 	match := re.FindString(value)
 	return match
 }
 
-// isNullPoint 判断是否是空指针
+// IsNullPoint 判断是否是空指针
 // 0x0为空指针。解析16进制，如果为0则为null
-func (g *GDBOutputUtil) isNullPoint(address string) bool {
+func (g *GDBOutputUtil) IsNullPoint(address string) bool {
 	if address == "" || address == "0x0" || address == "0x000000000000" {
 		return true
 	}
@@ -379,7 +382,7 @@ func (g *GDBOutputUtil) isNullPoint(address string) bool {
 	return num == 0
 }
 
-func (g *GDBOutputUtil) getInterfaceFromMap(m interface{}, key string) interface{} {
+func (g *GDBOutputUtil) GetInterfaceFromMap(m interface{}, key string) interface{} {
 	s, ok := m.(map[string]interface{})
 	if !ok {
 		return nil
@@ -388,8 +391,8 @@ func (g *GDBOutputUtil) getInterfaceFromMap(m interface{}, key string) interface
 	return answer
 }
 
-func (g *GDBOutputUtil) getStringFromMap(m interface{}, key string) string {
-	answer := g.getInterfaceFromMap(m, key)
+func (g *GDBOutputUtil) GetStringFromMap(m interface{}, key string) string {
+	answer := g.GetInterfaceFromMap(m, key)
 	if answer == nil {
 		return ""
 	}
@@ -397,13 +400,13 @@ func (g *GDBOutputUtil) getStringFromMap(m interface{}, key string) string {
 	return strAnswer
 }
 
-func (g *GDBOutputUtil) getIntFromMap(m interface{}, key string) int {
-	answer := g.getStringFromMap(m, key)
+func (g *GDBOutputUtil) GetIntFromMap(m interface{}, key string) int {
+	answer := g.GetStringFromMap(m, key)
 	numAnswer, _ := strconv.Atoi(answer)
 	return numAnswer
 }
 
-func (g *GDBOutputUtil) getListFromMap(m interface{}, key string) []interface{} {
+func (g *GDBOutputUtil) GetListFromMap(m interface{}, key string) []interface{} {
 	s, _ := m.(map[string]interface{})[key]
 	s2, _ := s.([]interface{})
 	return s2
@@ -420,14 +423,14 @@ func (g *GDBOutputUtil) mapDelete(m interface{}, key string) {
 }
 
 // 检查map中是否有某个key
-func (g *GDBOutputUtil) checkKeyFromMap(m interface{}, key string) bool {
+func (g *GDBOutputUtil) CheckKeyFromMap(m interface{}, key string) bool {
 	s, _ := m.(map[string]interface{})
 	_, exist := s[key]
 	return exist
 }
 
-func (g *GDBOutputUtil) getPayloadFromMap(m map[string]interface{}) (interface{}, bool) {
-	if class := g.getStringFromMap(m, "class"); class == "done" {
+func (g *GDBOutputUtil) GetPayloadFromMap(m map[string]interface{}) (interface{}, bool) {
+	if class := g.GetStringFromMap(m, "class"); class == "done" {
 		if payload, ok := m["payload"]; ok {
 			return payload, true
 		} else {

@@ -119,7 +119,7 @@ func TestVariable(t *testing.T) {
 	// 设置断点
 	err := helper.debug.SetBreakpoints(dap.Source{Path: "main.cpp"}, []dap.SourceBreakpoint{
 		{Line: 64},
-		{Line: 80},
+		{Line: 82},
 	})
 	assert.Nil(t, err)
 
@@ -157,9 +157,7 @@ func TestVariable(t *testing.T) {
 		{Name: "Global", VariablesReference: 1001},
 		{Name: "Local", VariablesReference: 1002},
 	}, scopes)
-
-	variables, err := helper.debug.GetVariables(scopes[1].VariablesReference)
-	assert.Equal(t, 5, len(variables))
+	verifyLocalVariables2(t, helper.debug, scopes[1].VariablesReference)
 }
 
 // verifyGlobalVariables 验证全局变量
@@ -225,6 +223,16 @@ func verifyLocalVariables(t *testing.T, debug *CPPDebugger, ref int) {
 		{Name: "fval", Value: "1.72359711e-43", Type: "float"},
 		{Name: "cval", Value: "123 '{'", Type: "char"},
 	}, localValue)
+}
+
+// verifyLocalVariables2 验证局部变量
+func verifyLocalVariables2(t *testing.T, debug *CPPDebugger, ref int) {
+	variables, err := debug.GetVariables(ref)
+	assert.Nil(t, err)
+	assert.Equal(t, 5, len(variables))
+	arrayVars, err := debug.GetVariables(variables[4].VariablesReference)
+	assert.Nil(t, err)
+	fmt.Println(arrayVars)
 }
 
 // verifyLocalPointVariables
