@@ -176,7 +176,7 @@ func (c *CPPDebugger) getVariables(reference int) ([]dap.Variable, error) {
 				variable.Value = address
 				if !c.gdbOutputUtil.IsNullPoint(address) {
 					variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-						&gdb_debugger.ReferenceStruct{Type: "p", PointType: variable.Type, Address: address, VariableName: variable.Name})
+						&gdb_debugger.ReferenceStruct{Type: "p", VariableType: variable.Type, Address: address, VariableName: variable.Name})
 				}
 			}
 		}
@@ -315,18 +315,40 @@ func (c *CPPDebugger) parseObject2Keys(inputStr string) []string {
 			answer = append(answer, key)
 		}
 	}
+
 	return answer
+}
+
+// isSmartPointer 判断是否是智能指针
+func (c *CPPDebugger) isSmartPointer(typeStr string) bool {
+	return strings.Contains(typeStr, "std::unique_ptr<")
+}
+
+// getSmartPointerExpression 获取智能指针的表达式
+func (c *CPPDebugger) getSmartPointerExpression(varName string, fieldPath string) string {
+	if fieldPath == "" {
+		return fmt.Sprintf("(%s).get()", varName)
+	}
+	return fmt.Sprintf("(%s).get()->%s", varName, fieldPath)
 }
 
 // getExport 通过ReferenceStruct，获取变量表达式
 func (c *CPPDebugger) GetExport(ref *gdb_debugger.ReferenceStruct) string {
 	var exp string
 	if ref.Type == "v" {
-		exp = ref.VariableName
+		if c.isSmartPointer(ref.VariableType) {
+			exp = c.getSmartPointerExpression(ref.VariableName, ref.FieldPath)
+		} else {
+			exp = ref.VariableName
+		}
 	} else if ref.Type == "p" {
-		exp = fmt.Sprintf("*(%s)%s", ref.PointType, ref.Address)
+		if c.isSmartPointer(ref.VariableType) {
+			exp = c.getSmartPointerExpression(ref.VariableName, ref.FieldPath)
+		} else {
+			exp = fmt.Sprintf("*(%s)%s", ref.VariableType, ref.Address)
+		}
 	}
-	if ref.FieldPath != "" {
+	if ref.FieldPath != "" && !c.isSmartPointer(ref.VariableType) {
 		exp = fmt.Sprintf("(%s).%s", exp, ref.FieldPath)
 	}
 	return exp

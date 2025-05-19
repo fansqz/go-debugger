@@ -329,7 +329,7 @@ func (g *GDBDebugger) getVariables(reference int) ([]dap.Variable, error) {
 				variable.Value = address
 				if !g.GdbOutputUtil.IsNullPoint(address) {
 					variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
-						&ReferenceStruct{Type: "p", PointType: variable.Type, Address: address, VariableName: variable.Name})
+						&ReferenceStruct{Type: "p", VariableType: variable.Type, Address: address, VariableName: variable.Name})
 				}
 			}
 		}
@@ -356,7 +356,7 @@ func (g *GDBDebugger) GetLocalScopeVariables(reference int) ([]dap.Variable, err
 		if !g.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			// 如果parentRef不为空，说明是栈帧中的某个结构体变量
 			variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
-				&ReferenceStruct{Type: "v", FrameId: strconv.Itoa(frameId), VariableName: variable.Name})
+				&ReferenceStruct{Type: "v", FrameId: strconv.Itoa(frameId), VariableName: variable.Name, VariableType: variable.Type})
 		}
 		// 指针类型，如果有值，但是children又不为0说明是指针类型
 		if g.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
@@ -368,7 +368,7 @@ func (g *GDBDebugger) GetLocalScopeVariables(reference int) ([]dap.Variable, err
 				variable.Value = address
 				if !g.GdbOutputUtil.IsNullPoint(address) {
 					variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
-						&ReferenceStruct{Type: "p", PointType: variable.Type, Address: address, VariableName: variable.Name})
+						&ReferenceStruct{Type: "p", VariableType: variable.Type, Address: address, VariableName: variable.Name})
 				}
 			}
 		}
@@ -396,7 +396,7 @@ func (g *GDBDebugger) GetGlobalScopeVariables() ([]dap.Variable, error) {
 		if !g.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			// 如果parentRef不为空，说明是栈帧中的某个结构体变量
 			variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
-				&ReferenceStruct{Type: "v", FrameId: "0", VariableName: variable.Name})
+				&ReferenceStruct{Type: "v", FrameId: "0", VariableName: variable.Name, VariableType: variable.Type})
 			variable.Value = ""
 		}
 		// 指针类型，如果有值，但是children又不为0说明是指针类型
@@ -409,7 +409,7 @@ func (g *GDBDebugger) GetGlobalScopeVariables() ([]dap.Variable, error) {
 				variable.Value = address
 				if !g.GdbOutputUtil.IsNullPoint(address) {
 					variable.VariablesReference, _ = g.ReferenceUtil.CreateVariableReference(
-						&ReferenceStruct{Type: "p", PointType: variable.Type, Address: address, VariableName: variable.Name})
+						&ReferenceStruct{Type: "p", VariableType: variable.Type, Address: address, VariableName: variable.Name})
 				}
 			}
 		}
@@ -533,7 +533,7 @@ func (g *GDBDebugger) GetExport(ref *ReferenceStruct) string {
 	if ref.Type == "v" {
 		exp = ref.VariableName
 	} else if ref.Type == "p" {
-		exp = fmt.Sprintf("(%s)%s", ref.PointType, ref.Address)
+		exp = fmt.Sprintf("(%s)%s", ref.VariableType, ref.Address)
 	}
 	if ref.FieldPath != "" {
 		exp = fmt.Sprintf("(%s).%s", exp, ref.FieldPath)

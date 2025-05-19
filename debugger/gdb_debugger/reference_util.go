@@ -30,7 +30,7 @@ type ReferenceStruct struct {
 	Type         ReferenceType
 	FrameId      string
 	VariableName string
-	PointType    string
+	VariableType string
 	Address      string
 	FieldPath    string
 }
@@ -124,7 +124,7 @@ func GetFieldReferenceStruct(refStruct *ReferenceStruct, fieldName string) *Refe
 		Type:         refStruct.Type,
 		FrameId:      refStruct.FrameId,
 		VariableName: refStruct.VariableName,
-		PointType:    refStruct.PointType,
+		VariableType: refStruct.VariableType,
 		Address:      refStruct.Address,
 	}
 	if refStruct.FieldPath == "" {
