@@ -3,12 +3,6 @@ package cpp_debugger
 import (
 	"errors"
 	"fmt"
-	"github.com/fansqz/go-debugger/constants"
-	. "github.com/fansqz/go-debugger/debugger"
-	"github.com/fansqz/go-debugger/debugger/gdb_debugger"
-	"github.com/fansqz/go-debugger/debugger/gdb_debugger/gdb"
-	"github.com/fansqz/go-debugger/debugger/utils"
-	"github.com/google/go-dap"
 	"log"
 	"os"
 	"os/exec"
@@ -17,6 +11,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fansqz/go-debugger/constants"
+	. "github.com/fansqz/go-debugger/debugger"
+	"github.com/fansqz/go-debugger/debugger/gdb_debugger"
+	"github.com/fansqz/go-debugger/debugger/gdb_debugger/gdb"
+	"github.com/fansqz/go-debugger/debugger/utils"
+	"github.com/google/go-dap"
 )
 
 const (
@@ -184,16 +185,6 @@ func (c *CPPDebugger) getVariables(reference int) ([]dap.Variable, error) {
 	return answer, nil
 }
 
-// selectFrame 如果是普通类型需要切换栈帧，同一个变量名，可能在不同栈帧中会有重复，需要定位栈帧和变量名称才能读取到变量值
-func (c *CPPDebugger) selectFrame(ref *gdb_debugger.ReferenceStruct) error {
-	if ref.Type == gdb_debugger.StructType {
-		if _, err := c.gdb.SendWithTimeout(OptionTimeout, "stack-select-frame", ref.FrameId); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // varListChildrenForCpp c++中var-list-children会因为一些private、public修饰符而无法获取结构体内容，需要特殊处理
 func (c *CPPDebugger) varListChildrenForCpp(ref *gdb_debugger.ReferenceStruct, targetVariable *dap.Variable) ([]dap.Variable, error) {
 	if !c.checkIsCppArrayType(targetVariable) {
@@ -205,7 +196,7 @@ func (c *CPPDebugger) varListChildrenForCpp(ref *gdb_debugger.ReferenceStruct, t
 
 func (c *CPPDebugger) varListChildrenForCppStruct(ref *gdb_debugger.ReferenceStruct) ([]dap.Variable, error) {
 	// 读取结构体值
-	exp := c.gdbDebugger.GetExport(ref)
+	exp := c.GetExport(ref)
 	_, _ = c.gdbDebugger.GDB.SendWithTimeout(OptionTimeout, "enable-pretty-printing")
 	m, err := c.gdbDebugger.GDB.SendWithTimeout(OptionTimeout, "data-evaluate-expression", exp)
 	if err != nil {
@@ -271,7 +262,7 @@ func (c *CPPDebugger) varListChildrenForCppArray(ref *gdb_debugger.ReferenceStru
 					typ = strings.TrimSpace(match[1])
 				}
 				if typ != "" {
-					m, err = c.gdb.SendWithTimeout(OptionTimeout, "data-evaluate-expression", fmt.Sprintf("sizeof(%s)/sizeof(%s)", exp, typ))
+					m, _ = c.gdb.SendWithTimeout(OptionTimeout, "data-evaluate-expression", fmt.Sprintf("sizeof(%s)/sizeof(%s)", exp, typ))
 					payload := c.gdbOutputUtil.GetInterfaceFromMap(m, "payload")
 					value := c.gdbOutputUtil.GetStringFromMap(payload, "value")
 					arrayLength, _ = strconv.Atoi(value)
@@ -325,4 +316,18 @@ func (c *CPPDebugger) parseObject2Keys(inputStr string) []string {
 		}
 	}
 	return answer
+}
+
+// getExport 通过ReferenceStruct，获取变量表达式
+func (c *CPPDebugger) GetExport(ref *gdb_debugger.ReferenceStruct) string {
+	var exp string
+	if ref.Type == "v" {
+		exp = ref.VariableName
+	} else if ref.Type == "p" {
+		exp = fmt.Sprintf("*(%s)%s", ref.PointType, ref.Address)
+	}
+	if ref.FieldPath != "" {
+		exp = fmt.Sprintf("(%s).%s", exp, ref.FieldPath)
+	}
+	return exp
 }

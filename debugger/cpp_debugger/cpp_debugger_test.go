@@ -2,11 +2,12 @@ package cpp_debugger
 
 import (
 	"fmt"
-	"github.com/google/go-dap"
 	"io"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/google/go-dap"
 
 	"github.com/fansqz/go-debugger/debugger"
 	"github.com/fansqz/go-debugger/utils"
@@ -266,4 +267,94 @@ func compileFile(workPath string, cppFile string) (string, string, error) {
 	// 编译文件
 	execFile, err := CompileCPPFile(workPath, string(code))
 	return execFile, string(code), err
+}
+
+// TestLink 测试链表算法
+func TestLink(t *testing.T) {
+	helper := newTestHelper(t)
+	defer helper.cleanup()
+
+	helper.setup("link.cpp")
+
+	// 设置断点
+	err := helper.debug.SetBreakpoints(dap.Source{Path: "main.cpp"}, []dap.SourceBreakpoint{
+		{Line: 24},
+	})
+	assert.Nil(t, err)
+
+	// 启动调试
+	err = helper.debug.Run()
+	assert.Nil(t, err)
+	helper.waitForEvent("continued")
+	helper.waitForEvent("stopped")
+
+	// 验证链表结构
+	stacks, err := helper.debug.GetStackTrace()
+	assert.Nil(t, err)
+	scopes, err := helper.debug.GetScopes(stacks[0].Id)
+	assert.Nil(t, err)
+
+	// 获取局部变量
+	variables, err := helper.debug.GetVariables(scopes[1].VariablesReference)
+	assert.Nil(t, err)
+	assert.NotEmpty(t, variables)
+
+	// 查找 node1 变量
+	var node1Var *dap.Variable
+	for _, v := range variables {
+		if v.Name == "node1" {
+			node1Var = &v
+			break
+		}
+	}
+	assert.NotNil(t, node1Var)
+	assert.Equal(t, "Node *", node1Var.Type)
+	assert.NotZero(t, node1Var.VariablesReference)
+
+	// 获取 node1 的内容
+	node1Content, err := helper.debug.GetVariables(node1Var.VariablesReference)
+	assert.Nil(t, err)
+	assert.NotEmpty(t, node1Content)
+
+	// 验证 node1 的数据
+	var dataVar *dap.Variable
+	var nextVar *dap.Variable
+	for _, v := range node1Content {
+		if v.Name == "data" {
+			dataVar = &v
+		} else if v.Name == "next" {
+			nextVar = &v
+		}
+	}
+	assert.NotNil(t, dataVar)
+	assert.Equal(t, "1", dataVar.Value)
+	assert.NotNil(t, nextVar)
+	assert.NotZero(t, nextVar.VariablesReference)
+
+	// 获取 node2 的内容
+	node2Content, err := helper.debug.GetVariables(nextVar.VariablesReference)
+	assert.Nil(t, err)
+	assert.NotEmpty(t, node2Content)
+
+	// 验证 node2 的数据
+	for _, v := range node2Content {
+		if v.Name == "data" {
+			assert.Equal(t, "2", v.Value)
+		} else if v.Name == "next" {
+			assert.NotZero(t, v.VariablesReference)
+			// 获取 node3 的内容
+			node3Content, err := helper.debug.GetVariables(v.VariablesReference)
+			assert.Nil(t, err)
+			assert.NotEmpty(t, node3Content)
+
+			// 验证 node3 的数据
+			for _, v := range node3Content {
+				if v.Name == "data" {
+					assert.Equal(t, "3", v.Value)
+				} else if v.Name == "next" {
+					assert.Equal(t, "0x0", v.Value)
+				}
+			}
+		}
+	}
 }
