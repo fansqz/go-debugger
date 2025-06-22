@@ -137,6 +137,50 @@ func collectVariables(node *sitter.Node, sourceCode []byte, existingVars map[str
 		}
 	}
 
+	// 处理简单的变量声明（如 Item localItem; Value localValue;）
+	if node.Type() == "declaration" {
+		// 遍历所有子节点寻找变量声明
+		cursor := sitter.NewTreeCursor(node)
+		defer cursor.Close()
+
+		if cursor.GoToFirstChild() {
+			for {
+				childNode := cursor.CurrentNode()
+
+				// 检查是否是标识符（变量名）
+				if childNode.Type() == "identifier" {
+					varName := childNode.Content(sourceCode)
+					if varName != "" && !existingVars[varName] {
+						// 获取类型信息
+						typeNode := node.ChildByFieldName("type")
+						typeStr := ""
+						if typeNode != nil {
+							typeStr = typeNode.Content(sourceCode)
+						}
+
+						varInfo := &VariableInfo{
+							Name: varName,
+							Type: typeStr,
+							Location: struct {
+								Line   int
+								Column int
+							}{
+								Line:   int(childNode.StartPoint().Row + 1),
+								Column: int(childNode.StartPoint().Column + 1),
+							},
+						}
+						variables = append(variables, *varInfo)
+						existingVars[varName] = true
+					}
+				}
+
+				if !cursor.GoToNextSibling() {
+					break
+				}
+			}
+		}
+	}
+
 	return variables
 }
 

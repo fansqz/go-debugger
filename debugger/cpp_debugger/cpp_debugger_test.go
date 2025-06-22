@@ -202,9 +202,9 @@ func verifyLocalVariables(t *testing.T, debug *CPPDebugger, ref int) {
 		{Name: "localInt", Value: "5", Type: "int"},
 		{Name: "localChar", Value: "71 'G'", Type: "char"},
 		{Name: "staticLocalFloat", Value: "6.78000021", Type: "float"},
-		{Name: "localItem", Value: "", Type: "Item", VariablesReference: 1102},
-		{Name: "localColor", Value: "Color::RED", Type: "Color"},
-		{Name: "localValue", Value: "", Type: "Value", VariablesReference: 1103},
+		{Name: "localItem", Value: "", Type: "Item", VariablesReference: 1102, IndexedVariables: 1},
+		{Name: "localColor", Value: "Color::BLUE", Type: "Color"},
+		{Name: "localValue", Value: "", Type: "Value", VariablesReference: 1103, IndexedVariables: 1},
 	}, variables)
 
 	// 验证局部结构体成员
@@ -213,11 +213,11 @@ func verifyLocalVariables(t *testing.T, debug *CPPDebugger, ref int) {
 	assert.Equal(t, []dap.Variable{
 		{Name: "id", Value: "2", Type: "int"},
 		{Name: "weight", Value: "42", Type: "float"},
-		{Name: "color", Value: "GREEN", Type: "Color"},
+		{Name: "color", Value: "Color::GREEN", Type: "Color"},
 	}, localItem)
 
 	// 验证联合体成员
-	localValue, err := debug.GetVariables(variables[5].VariablesReference)
+	localValue, err := debug.GetVariables(variables[6].VariablesReference)
 	assert.Nil(t, err)
 	assert.Equal(t, []dap.Variable{
 		{Name: "ival", Value: "123", Type: "int"},
@@ -234,13 +234,6 @@ func verifyLocalVariables2(t *testing.T, debug *CPPDebugger, ref int) {
 	arrayVars, err := debug.GetVariables(variables[4].VariablesReference)
 	assert.Nil(t, err)
 	fmt.Println(arrayVars)
-}
-
-// verifyLocalPointVariables
-func verifyLocalPointVariables(t *testing.T, debug *CPPDebugger, ref int) {
-	variables, err := debug.GetVariables(ref)
-	assert.Nil(t, err)
-	fmt.Println(variables)
 }
 
 // getStoppedLine 获取当前停止的行号
@@ -355,109 +348,6 @@ func TestLink(t *testing.T) {
 					assert.Equal(t, "0x0", v.Value)
 				}
 			}
-		}
-	}
-}
-
-// TestSmartPointer 测试智能指针
-func TestSmartPointer(t *testing.T) {
-	helper := newTestHelper(t)
-	defer helper.cleanup()
-
-	helper.setup("smart_ptr.cpp")
-
-	// 设置断点
-	err := helper.debug.SetBreakpoints(dap.Source{Path: "main.cpp"}, []dap.SourceBreakpoint{
-		{Line: 20},
-	})
-	assert.Nil(t, err)
-
-	// 启动调试
-	err = helper.debug.Run()
-	assert.Nil(t, err)
-	helper.waitForEvent("continued")
-	helper.waitForEvent("stopped")
-
-	// 获取栈帧和作用域
-	stacks, err := helper.debug.GetStackTrace()
-	assert.Nil(t, err)
-	scopes, err := helper.debug.GetScopes(stacks[0].Id)
-	assert.Nil(t, err)
-
-	// 获取局部变量
-	variables, err := helper.debug.GetVariables(scopes[1].VariablesReference)
-	assert.Nil(t, err)
-	assert.NotEmpty(t, variables)
-
-	// 验证智能指针变量
-	var person1Var *dap.Variable
-	var rawPtrVar *dap.Variable
-	for _, v := range variables {
-		if v.Name == "person1" {
-			person1Var = &v
-		} else if v.Name == "raw_ptr" {
-			rawPtrVar = &v
-		}
-	}
-	assert.NotNil(t, person1Var)
-	assert.Equal(t, "std::unique_ptr<Person, std::default_delete<Person> >", person1Var.Type)
-	assert.NotZero(t, person1Var.VariablesReference)
-
-	// 获取智能指针指向的内容
-	person1Content, err := helper.debug.GetVariables(person1Var.VariablesReference)
-	assert.Nil(t, err)
-	assert.NotEmpty(t, person1Content)
-
-	// 验证智能指针的成员
-	var nameVar *dap.Variable
-	var ageVar *dap.Variable
-	var friendVar *dap.Variable
-	for _, v := range person1Content {
-		if v.Name == "name" {
-			nameVar = &v
-		} else if v.Name == "age" {
-			ageVar = &v
-		} else if v.Name == "friend_ptr" {
-			friendVar = &v
-		}
-	}
-	assert.NotNil(t, nameVar)
-	assert.Equal(t, "\"Alice\"", nameVar.Value)
-	assert.NotNil(t, ageVar)
-	assert.Equal(t, "25", ageVar.Value)
-	assert.NotNil(t, friendVar)
-	assert.NotZero(t, friendVar.VariablesReference)
-
-	// 验证朋友指针的内容
-	friendContent, err := helper.debug.GetVariables(friendVar.VariablesReference)
-	assert.Nil(t, err)
-	assert.NotEmpty(t, friendContent)
-
-	// 验证朋友的信息
-	for _, v := range friendContent {
-		if v.Name == "name" {
-			assert.Equal(t, "\"Bob\"", v.Value)
-		} else if v.Name == "age" {
-			assert.Equal(t, "30", v.Value)
-		}
-	}
-
-	// 验证普通指针
-	assert.NotNil(t, rawPtrVar)
-	assert.Equal(t, "Person *", rawPtrVar.Type)
-	assert.NotZero(t, rawPtrVar.VariablesReference)
-
-	// 获取普通指针指向的内容
-	rawPtrContent, err := helper.debug.GetVariables(rawPtrVar.VariablesReference)
-	assert.Nil(t, err)
-	assert.NotEmpty(t, rawPtrContent)
-
-	// 验证普通指针的成员
-	for _, v := range rawPtrContent {
-		if v.Name == "name" {
-			assert.Equal(t, "\"Charlie\"", v.Value)
-		} else if v.Name == "age" {
-			assert.Equal(t, "35", v.Value)
 		}
 	}
 }

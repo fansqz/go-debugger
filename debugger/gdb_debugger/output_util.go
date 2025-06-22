@@ -2,15 +2,16 @@ package gdb_debugger
 
 import (
 	"fmt"
-	"github.com/fansqz/go-debugger/constants"
-	"github.com/fansqz/go-debugger/debugger/gdb_debugger/gdb"
-	"github.com/google/go-dap"
-	"github.com/sirupsen/logrus"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/fansqz/go-debugger/constants"
+	"github.com/fansqz/go-debugger/debugger/gdb_debugger/gdb"
+	"github.com/google/go-dap"
+	"github.com/sirupsen/logrus"
 )
 
 // GDBOutputUtil 处理gdb输出的工具
@@ -348,8 +349,10 @@ func (g *GDBOutputUtil) IsShouldBeFilterAddress(address string) bool {
 }
 
 func (g *GDBOutputUtil) CheckIsAddress(value string) bool {
-	// 识别c++中的 std::unique_ptr<Item> = {get() = 0x55555556ceb0}
-	if strings.HasPrefix(value, "std::unique_ptr") {
+	// 识别c++中的智能指针
+	if strings.HasPrefix(value, "std::unique_ptr") ||
+		strings.HasPrefix(value, "std::shared_ptr") ||
+		strings.HasPrefix(value, "std::weak_ptr") {
 		return true
 	}
 	a := strings.Split(value, " ")

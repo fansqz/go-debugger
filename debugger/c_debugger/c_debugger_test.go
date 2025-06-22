@@ -1,11 +1,12 @@
 package c_debugger
 
 import (
-	"github.com/google/go-dap"
 	"io"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/google/go-dap"
 
 	"github.com/fansqz/go-debugger/debugger"
 	"github.com/fansqz/go-debugger/utils"
@@ -133,7 +134,7 @@ func TestVariable(t *testing.T) {
 	assert.Nil(t, err)
 
 	// 验证作用域
-	scopes, err := helper.debug.GetScopes(stacks[0].Id)
+	scopes, _ := helper.debug.GetScopes(stacks[0].Id)
 	assert.Equal(t, []dap.Scope{
 		{Name: "Global", VariablesReference: 1001},
 		{Name: "Local", VariablesReference: 1002},
@@ -194,8 +195,8 @@ func verifyLocalVariables(t *testing.T, debug *CDebugger, ref int) {
 
 // verifyLocalVariables2 测试一下数组
 func verifyLocalVariables2(t *testing.T, debug *CDebugger, ref int) {
-	variables, err := debug.GetVariables(ref)
-	variables, err = debug.GetVariables(variables[4].VariablesReference)
+	variables, _ := debug.GetVariables(ref)
+	variables, err := debug.GetVariables(variables[4].VariablesReference)
 	assert.Nil(t, err)
 	assert.NotEqual(t, 0, len(variables))
 }
