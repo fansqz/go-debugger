@@ -351,3 +351,65 @@ func TestLink(t *testing.T) {
 		}
 	}
 }
+
+// TestArrayVariables 测试全局和局部数组变量
+func TestArrayVariables(t *testing.T) {
+	helper := newTestHelper(t)
+	defer helper.cleanup()
+
+	helper.setup("array.cpp")
+
+	// 设置断点，假设 main 函数数组定义后第一个可断点行是 40
+	err := helper.debug.SetBreakpoints(dap.Source{Path: "main.cpp"}, []dap.SourceBreakpoint{
+		{Line: 49},
+	})
+	assert.Nil(t, err)
+
+	// 启动调试
+	err = helper.debug.Run()
+	assert.Nil(t, err)
+	helper.waitForEvent("continued")
+	helper.waitForEvent("stopped")
+
+	// 获取栈帧和作用域
+	stacks, err := helper.debug.GetStackTrace()
+	assert.Nil(t, err)
+	scopes, err := helper.debug.GetScopes(stacks[0].Id)
+	assert.Nil(t, err)
+
+	// 检查全局变量
+	globalVars, err := helper.debug.GetVariables(scopes[0].VariablesReference)
+	assert.Nil(t, err)
+	assert.True(t, containsVariable(globalVars, "globalIntArr"))
+	assert.True(t, containsVariable(globalVars, "globalFloatArr"))
+	assert.True(t, containsVariable(globalVars, "globalCharArr"))
+
+	for _, v := range globalVars {
+		intArrVars, err := helper.debug.GetVariables(v.VariablesReference)
+		assert.Nil(t, err)
+		assert.NotEqual(t, 0, len(intArrVars))
+	}
+
+	// 检查局部变量
+	localVars, err := helper.debug.GetVariables(scopes[1].VariablesReference)
+	assert.Nil(t, err)
+	assert.True(t, containsVariable(localVars, "intArr"))
+	assert.True(t, containsVariable(localVars, "floatArr"))
+	assert.True(t, containsVariable(localVars, "charArr"))
+
+	for _, v := range localVars {
+		intArrVars, err := helper.debug.GetVariables(v.VariablesReference)
+		assert.Nil(t, err)
+		assert.NotEqual(t, 0, len(intArrVars))
+	}
+}
+
+// containsVariable 判断变量列表中是否包含指定变量名
+func containsVariable(vars []dap.Variable, name string) bool {
+	for _, v := range vars {
+		if v.Name == name {
+			return true
+		}
+	}
+	return false
+}

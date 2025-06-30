@@ -330,7 +330,7 @@ func (c *CPPDebugger) varListChildrenForCppStruct(ref *gdb_debugger.ReferenceStr
 // varListChildrenForCppArray 获取数组的元素
 // 支持std::array、C数组、std::vector等类型
 func (c *CPPDebugger) varListChildrenForCppArray(ref *gdb_debugger.ReferenceStruct, targetVariable *dap.Variable) ([]dap.Variable, error) {
-	arrayLength := c.getArrayLength(targetVariable)
+	arrayLength := c.getArrayLength(ref, targetVariable)
 	if arrayLength == 0 {
 		return nil, nil
 	}
@@ -357,7 +357,7 @@ func (c *CPPDebugger) varListChildrenForCppArray(ref *gdb_debugger.ReferenceStru
 
 // getArrayLength 获取数组长度
 // 支持多种数组类型：std::array、C数组、std::vector
-func (c *CPPDebugger) getArrayLength(targetVariable *dap.Variable) int {
+func (c *CPPDebugger) getArrayLength(ref *gdb_debugger.ReferenceStruct, targetVariable *dap.Variable) int {
 	// 尝试从std::array获取长度
 	if length := c.extractStdArrayLength(targetVariable.Type); length > 0 {
 		return length
@@ -370,7 +370,7 @@ func (c *CPPDebugger) getArrayLength(targetVariable *dap.Variable) int {
 
 	// 尝试从std::vector获取长度
 	if strings.Contains(targetVariable.Type, "std::vector") {
-		return c.getVectorLength(targetVariable)
+		return c.getVectorLength(ref, targetVariable)
 	}
 
 	return 0
@@ -392,7 +392,7 @@ func (c *CPPDebugger) extractStdArrayLength(typeStr string) int {
 // extractCArrayLength 从C数组类型中提取长度
 // 匹配模式：T[N]
 func (c *CPPDebugger) extractCArrayLength(typeStr string) int {
-	pattern := `(\w+)\s*\[\s*(\d+)\s*\]`
+	pattern := `([\w\s\*\:]+)\[\s*(\d+)\s*\]`
 	re := regexp.MustCompile(pattern)
 	if match := re.FindStringSubmatch(typeStr); match != nil {
 		if length, err := strconv.Atoi(match[2]); err == nil {
@@ -404,8 +404,8 @@ func (c *CPPDebugger) extractCArrayLength(typeStr string) int {
 
 // getVectorLength 获取std::vector的长度
 // 优先使用size()方法，失败时使用sizeof计算
-func (c *CPPDebugger) getVectorLength(targetVariable *dap.Variable) int {
-	exp := c.gdbDebugger.GetExport(&gdb_debugger.ReferenceStruct{VariableName: targetVariable.Name})
+func (c *CPPDebugger) getVectorLength(ref *gdb_debugger.ReferenceStruct, targetVariable *dap.Variable) int {
+	exp := c.gdbDebugger.GetExport(ref)
 
 	// 方法1：通过size()获取长度
 	if m, err := c.gdb.SendWithTimeout(OptionTimeout, "data-evaluate-expression", fmt.Sprintf("%s.size()", exp)); err == nil {
