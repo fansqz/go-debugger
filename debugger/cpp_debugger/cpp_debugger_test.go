@@ -361,7 +361,7 @@ func TestArrayVariables(t *testing.T) {
 
 	// 设置断点，假设 main 函数数组定义后第一个可断点行是 40
 	err := helper.debug.SetBreakpoints(dap.Source{Path: "main.cpp"}, []dap.SourceBreakpoint{
-		{Line: 33},
+		{Line: 49},
 	})
 	assert.Nil(t, err)
 
