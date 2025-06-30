@@ -383,8 +383,8 @@ func (g *GDBDebugger) getLocalVariables2(reference int) ([]dap.Variable, error) 
 			logrus.Errorf("getChidrenNumber fail err = %s", err)
 			continue
 		}
-		variable := g.GdbOutputUtil.ParseVarCreate(m2)
-		if variable == nil {
+		variable, ok := g.GdbOutputUtil.ParseVarCreate(m2)
+		if !ok {
 			continue
 		}
 		answer = append(answer, *variable)
@@ -412,7 +412,10 @@ func (g *GDBDebugger) CreateVar(ref *ReferenceStruct, structName string) (*dap.V
 		logrus.Errorf("create var fail %s", err)
 		return nil, err
 	}
-	variable := g.GdbOutputUtil.ParseVarCreate(m)
+	variable, ok := g.GdbOutputUtil.ParseVarCreate(m)
+	if !ok {
+		return nil, fmt.Errorf("create var fail")
+	}
 	return variable, nil
 }
 

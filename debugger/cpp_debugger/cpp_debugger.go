@@ -318,7 +318,7 @@ func (c *CPPDebugger) varListChildrenForCppStruct(ref *gdb_debugger.ReferenceStr
 			continue
 		}
 
-		if variable := c.gdbOutputUtil.ParseVarCreate(m); variable != nil {
+		if variable, ok := c.gdbOutputUtil.ParseVarCreate(m); ok {
 			result = append(result, *variable)
 		}
 		// 清理临时变量
@@ -346,7 +346,7 @@ func (c *CPPDebugger) varListChildrenForCppArray(ref *gdb_debugger.ReferenceStru
 			continue
 		}
 
-		if variable := c.gdbOutputUtil.ParseVarCreate(m); variable != nil {
+		if variable, ok := c.gdbOutputUtil.ParseVarCreate(m); ok {
 			variable.Name = strconv.Itoa(i) // 使用索引作为元素名称
 			result = append(result, *variable)
 		}

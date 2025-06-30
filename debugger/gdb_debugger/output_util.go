@@ -144,7 +144,10 @@ func (g *GDBOutputUtil) ParseFrameVariablesOutput(gdb *gdb.Gdb, m map[string]int
 		if err != nil {
 			logrus.Errorf("getChidrenNumber fail err = %s", err)
 		}
-		variable := g.ParseVarCreate(m2)
+		variable, ok := g.ParseVarCreate(m2)
+		if !ok {
+			continue
+		}
 		answer = append(answer, *variable)
 		_, _ = gdb.SendWithTimeout(OptionTimeout, "var-delete", name)
 	}
@@ -189,7 +192,10 @@ func (g *GDBOutputUtil) ParseGlobalVariableOutput(gdb *gdb.Gdb, m map[string]int
 				if err != nil {
 					logrus.Errorf("getChidrenNumber fail err = %s", err)
 				}
-				variable := g.ParseVarCreate(m2)
+				variable, ok := g.ParseVarCreate(m2)
+				if !ok {
+					continue
+				}
 				answer = append(answer, *variable)
 				_, _ = gdb.SendWithTimeout(OptionTimeout, "var-delete", name)
 			}
@@ -298,10 +304,10 @@ func (g *GDBOutputUtil) ParseStoppedEventOutput(m interface{}) *StoppedOutput {
 //	  type -> char [50]
 //	  has_more -> 0
 //	}
-func (g *GDBOutputUtil) ParseVarCreate(m map[string]interface{}) *dap.Variable {
+func (g *GDBOutputUtil) ParseVarCreate(m map[string]any) (*dap.Variable, bool) {
 	payload, success := g.GetPayloadFromMap(m)
 	if !success {
-		return nil
+		return nil, false
 	}
 	variable := &dap.Variable{}
 	variable.Name = g.GetStringFromMap(payload, "name")
@@ -311,7 +317,7 @@ func (g *GDBOutputUtil) ParseVarCreate(m map[string]interface{}) *dap.Variable {
 	if variable.IndexedVariables == 0 {
 		variable.IndexedVariables = g.GetIntFromMap(payload, "has_more")
 	}
-	return variable
+	return variable, true
 }
 
 type StoppedOutput struct {
@@ -432,7 +438,7 @@ func (g *GDBOutputUtil) CheckKeyFromMap(m interface{}, key string) bool {
 	return exist
 }
 
-func (g *GDBOutputUtil) GetPayloadFromMap(m map[string]interface{}) (interface{}, bool) {
+func (g *GDBOutputUtil) GetPayloadFromMap (m map[string]any) (any, bool) {
 	if class := g.GetStringFromMap(m, "class"); class == "done" {
 		if payload, ok := m["payload"]; ok {
 			return payload, true
