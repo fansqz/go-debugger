@@ -375,6 +375,8 @@ func (g *GDBDebugger) getLocalVariables2(reference int) ([]dap.Variable, error) 
 		}
 	}
 
+	// 切换栈帧
+	g.GDB.SendWithTimeout(OptionTimeout, "stack-select-frame", strconv.Itoa(frameId))
 	// 读取变量列表
 	var answer []dap.Variable
 	for _, variableName := range targetVariableNames {
