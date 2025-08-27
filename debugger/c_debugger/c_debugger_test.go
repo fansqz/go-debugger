@@ -1,6 +1,8 @@
 package c_debugger
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -321,4 +323,44 @@ func compileFile(workPath string, cFile string) (string, string, error) {
 	execFile, err := CompileCFile(workPath, string(code))
 
 	return execFile, string(code), err
+}
+
+// TestMatrix 二维数组测试
+func TestMatrix(t *testing.T) {
+	helper := newTestHelper(t)
+	defer helper.cleanup()
+	helper.setup("matrix.c")
+	// 设置断点
+	err := helper.debug.SetBreakpoints(dap.Source{Path: "main.c"}, []dap.SourceBreakpoint{
+		{Line: 20},
+	})
+	assert.Nil(t, err)
+	err = helper.debug.Run()
+	assert.Nil(t, err)
+	helper.waitForEvent("continued")
+	helper.waitForEvent("stopped")
+
+	// 验证全局和局部结构体
+	matrix, err := getTargetLocalsVariable(t, helper.debug, "matrix")
+	assert.Nil(t, err)
+	matrixVariables, err := helper.debug.GetVariables(matrix.VariablesReference)
+	fmt.Sprintln(matrixVariables)
+	assert.Nil(t, err)
+	array1, err := helper.debug.GetVariables(matrixVariables[0].VariablesReference)
+	fmt.Sprintln(array1)
+}
+
+func getTargetLocalsVariable(t *testing.T, debugger debugger.Debugger, name string) (dap.Variable, error) {
+	stacks, err := debugger.GetStackTrace()
+	assert.Nil(t, err)
+	scopes, err := debugger.GetScopes(stacks[0].Id)
+	assert.Nil(t, err)
+	locals, err := debugger.GetVariables(scopes[1].VariablesReference)
+	assert.Nil(t, err)
+	for _, v := range locals {
+		if v.Name == name {
+			return v, nil
+		}
+	}
+	return dap.Variable{}, errors.New("not found")
 }

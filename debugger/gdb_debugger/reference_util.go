@@ -3,6 +3,7 @@ package gdb_debugger
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 )
 
@@ -128,9 +129,23 @@ func GetFieldReferenceStruct(refStruct *ReferenceStruct, fieldName string) *Refe
 		Address:      refStruct.Address,
 	}
 	if refStruct.FieldPath == "" {
-		newRef.FieldPath = fieldName
+		if checkIsNumber(fieldName) {
+			newRef.FieldPath = fmt.Sprintf("[%s]", fieldName)
+		} else {
+			newRef.FieldPath = fmt.Sprintf(".%s", fieldName)
+		}
 	} else {
-		newRef.FieldPath = refStruct.FieldPath + "." + fieldName
+		if checkIsNumber(fieldName) {
+			newRef.FieldPath = fmt.Sprintf("%s[%s]", refStruct.FieldPath, fieldName)
+		} else {
+			newRef.FieldPath = fmt.Sprintf("%s.%s", refStruct.FieldPath, fieldName)
+		}
 	}
 	return newRef
+}
+
+// 校验string是否是数值类型
+func checkIsNumber(str string) bool {
+	_, err := strconv.Atoi(str)
+	return err == nil
 }

@@ -558,7 +558,7 @@ func (c *CPPDebugger) GetExport(ref *gdb_debugger.ReferenceStruct) string {
 
 	// 添加字段路径，但智能指针需要特殊处理
 	if ref.FieldPath != "" && !c.isSmartPointer(ref.VariableType) {
-		exp = fmt.Sprintf("(%s).%s", exp, ref.FieldPath)
+		exp = fmt.Sprintf("(%s)%s", exp, ref.FieldPath)
 	}
 	return exp
 }

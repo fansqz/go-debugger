@@ -431,7 +431,7 @@ func (g *GDBDebugger) GetExport(ref *ReferenceStruct) string {
 		exp = fmt.Sprintf("(%s)%s", ref.VariableType, ref.Address)
 	}
 	if ref.FieldPath != "" {
-		exp = fmt.Sprintf("(%s).%s", exp, ref.FieldPath)
+		exp = fmt.Sprintf("(%s)%s", exp, ref.FieldPath)
 	}
 	return exp
 }
