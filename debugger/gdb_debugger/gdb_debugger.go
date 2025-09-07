@@ -124,15 +124,21 @@ func (g *GDBDebugger) Run() error {
 func (g *GDBDebugger) processUserInput(ctx context.Context) {
 	var input string
 	for {
-		_, err := fmt.Scanln(&input)
+		if g.StatusManager == nil || g.GDB == nil {
+			break
+		}
 		if g.StatusManager.Is(Finish) {
 			break
 		}
+
+		_, err := fmt.Scanln(&input)
 		if err == nil {
 			if input[len(input)-1] != '\n' {
 				input = input + "\n"
 			}
-			g.GDB.Write([]byte(input))
+			if _, err = g.GDB.Write([]byte(input)); err != nil {
+				logrus.Errorf("processUserInput fail, err = %s\n", err)
+			}
 		}
 		time.Sleep(100 * time.Microsecond)
 	}
@@ -206,7 +212,10 @@ func (g *GDBDebugger) continue2() error {
 func (g *GDBDebugger) SetBreakpoints(source dap.Source, breakpoints []dap.SourceBreakpoint) error {
 	g.mutex.Lock()
 	// 删除原来的所有断点
-	g.removeBreakpoints(g.breakpointNumbers)
+	err := g.removeBreakpoints(g.breakpointNumbers)
+	if err != nil {
+		return err
+	}
 	for _, bp := range breakpoints {
 		result, err := g.GDB.SendWithTimeout(OptionTimeout, "break-insert", source.Path+":"+strconv.Itoa(bp.Line))
 		if err != nil {
@@ -225,7 +234,9 @@ func (g *GDBDebugger) SetBreakpoints(source dap.Source, breakpoints []dap.Source
 func (g *GDBDebugger) removeBreakpoints(numbers []string) error {
 	for _, number := range numbers {
 		var callback gdb2.AsyncCallback = func(m map[string]interface{}) {}
-		g.GDB.SendAsync(callback, "break-delete", number)
+		if err := g.GDB.SendAsync(callback, "break-delete", number); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -289,7 +300,12 @@ func (g *GDBDebugger) GetVariables(reference int) ([]dap.Variable, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer g.DeleteVar(targetVar)
+	defer func(g *GDBDebugger, name string) {
+		err := g.DeleteVar(name)
+		if err != nil {
+			log.Printf("DeleteVar failed: %v\n", err)
+		}
+	}(g, targetVar)
 
 	// 读取变量的children元素列表
 	variables, err := g.varListChildren(targetVar)
@@ -376,7 +392,10 @@ func (g *GDBDebugger) getLocalVariables2(reference int) ([]dap.Variable, error) 
 	}
 
 	// 切换栈帧
-	g.GDB.SendWithTimeout(OptionTimeout, "stack-select-frame", strconv.Itoa(frameId))
+	_, err = g.GDB.SendWithTimeout(OptionTimeout, "stack-select-frame", strconv.Itoa(frameId))
+	if err != nil {
+		return nil, err
+	}
 	// 读取变量列表
 	var answer []dap.Variable
 	for _, variableName := range targetVariableNames {
@@ -421,13 +440,13 @@ func (g *GDBDebugger) CreateVar(ref *ReferenceStruct, structName string) (*dap.V
 	return variable, nil
 }
 
-// getExport 通过ReferenceStruct，获取变量表达式
+// GetExport 通过ReferenceStruct，获取变量表达式
 func (g *GDBDebugger) GetExport(ref *ReferenceStruct) string {
 	var exp string
 	switch ref.Type {
-	case "v":
+	case StructType:
 		exp = ref.VariableName
-	case "p":
+	case PointType:
 		exp = fmt.Sprintf("(%s)%s", ref.VariableType, ref.Address)
 	}
 	if ref.FieldPath != "" {
@@ -509,6 +528,9 @@ func (g *GDBDebugger) gdbNotificationCallback(m map[string]interface{}) {
 // processStoppedData 处理gdb返回的stopped数据，程序停止到程序的某个位置就会返回stopped data
 func (g *GDBDebugger) processStoppedData(m interface{}) {
 	stoppedOutput := g.GdbOutputUtil.ParseStoppedEventOutput(m)
+	if stoppedOutput == nil {
+		return
+	}
 	// 停留在断点
 	if stoppedOutput.reason == constants.StepStopped || stoppedOutput.reason == constants.BreakpointStopped {
 		// 返回停留的断点位置

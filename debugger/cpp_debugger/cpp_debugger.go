@@ -10,34 +10,29 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/fansqz/go-debugger/constants"
 	. "github.com/fansqz/go-debugger/debugger"
-	"github.com/fansqz/go-debugger/debugger/gdb_debugger"
+	. "github.com/fansqz/go-debugger/debugger/gdb_debugger"
 	"github.com/fansqz/go-debugger/debugger/gdb_debugger/gdb"
 	"github.com/fansqz/go-debugger/debugger/utils"
 	"github.com/google/go-dap"
-)
-
-const (
-	// OptionTimeout GDB命令执行超时时间
-	OptionTimeout = time.Second * 10
+	"github.com/sirupsen/logrus"
 )
 
 // CPPDebugger C++调试器，基于GDB实现
 // 主要处理C++特有的调试需求，如智能指针、STL容器、访问修饰符等
 type CPPDebugger struct {
-	gdbDebugger   *gdb_debugger.GDBDebugger   // 底层GDB调试器
-	gdbOutputUtil *gdb_debugger.GDBOutputUtil // GDB输出解析工具
-	statusManager *utils.StatusManager        // 调试状态管理器
-	referenceUtil *gdb_debugger.ReferenceUtil // 变量引用工具
-	gdb           *gdb.Gdb                    // GDB实例
+	gdbDebugger   *GDBDebugger         // 底层GDB调试器
+	gdbOutputUtil *GDBOutputUtil       // GDB输出解析工具
+	statusManager *utils.StatusManager // 调试状态管理器
+	referenceUtil *ReferenceUtil       // 变量引用工具
+	gdb           *gdb.Gdb             // GDB实例
 }
 
 // NewCPPDebugger 创建新的C++调试器实例
 func NewCPPDebugger() *CPPDebugger {
-	gdbDebugger := gdb_debugger.NewGDBDebugger(constants.LanguageCpp)
+	gdbDebugger := NewGDBDebugger(constants.LanguageCpp)
 	return &CPPDebugger{
 		gdbDebugger:   gdbDebugger,
 		gdbOutputUtil: gdbDebugger.GdbOutputUtil,
@@ -125,33 +120,22 @@ func CompileCPPFile(workPath string, code string) (string, error) {
 // processVariable 处理单个变量的通用逻辑
 // 处理结构体、指针、数组等不同类型的变量
 func (c *CPPDebugger) processVariable(variable dap.Variable, frameId string) dap.Variable {
-	// 处理结构体类型：如果value为空且IndexedVariables不为0，说明是结构体
+	var err error
+	// 结构体类型设置结构体引用
 	if !c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
-		variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-			&gdb_debugger.ReferenceStruct{
-				Type:         "v", // 变量类型
-				FrameId:      frameId,
-				VariableName: variable.Name,
-				VariableType: variable.Type,
-			})
+		variable.VariablesReference, err = c.referenceUtil.CreateVariableReference(NewStructReferenceStruct(frameId, variable.Name, variable.Type))
+		if err != nil {
+			logrus.Errorf("processVariable fail, err = %s\n", err)
+		}
 		variable.Value = "" // 结构体类型清空value，避免显示地址
-	}
-
-	// 处理指针类型：如果value是地址且IndexedVariables不为0，说明是指针
-	if c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
+	} else if c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 		// 排除char*类型，避免处理字符串指针
 		if variable.Type != "char *" && !c.gdbOutputUtil.IsShouldBeFilterAddress(variable.Value) {
 			address := c.gdbOutputUtil.ConvertValueToAddress(variable.Value)
 			variable.Value = address
 			// 非空指针才创建引用
 			if !c.gdbOutputUtil.IsNullPoint(address) {
-				variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-					&gdb_debugger.ReferenceStruct{
-						Type:         "p", // 指针类型
-						VariableType: variable.Type,
-						Address:      address,
-						VariableName: variable.Name,
-					})
+				variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(NewPointReferenceStruct(variable.Type, address))
 			}
 		}
 	}
@@ -234,23 +218,14 @@ func (c *CPPDebugger) getVariables(reference int) ([]dap.Variable, error) {
 	for _, variable := range variables {
 		// 处理结构体成员：如果value不为指针且IndexedVariables不为0，说明是结构体
 		if !c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
-			variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-				gdb_debugger.GetFieldReferenceStruct(refStruct, variable.Name))
-		}
-
-		// 处理指针成员：如果value是地址且IndexedVariables不为0，说明是指针
-		if c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
+			variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(GetFieldReferenceStruct(refStruct, variable.Name))
+		} else if c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
 			if variable.Type != "char *" && !c.gdbOutputUtil.IsShouldBeFilterAddress(variable.Value) {
 				address := c.gdbOutputUtil.ConvertValueToAddress(variable.Value)
 				variable.Value = address
+
 				if !c.gdbOutputUtil.IsNullPoint(address) {
-					variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-						&gdb_debugger.ReferenceStruct{
-							Type:         "p",
-							VariableType: variable.Type,
-							Address:      address,
-							VariableName: variable.Name,
-						})
+					variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(NewPointReferenceStruct(variable.Type, address))
 				}
 			}
 		}
@@ -286,7 +261,7 @@ func (c *CPPDebugger) getVariablesForCpp(reference int) ([]dap.Variable, error) 
 
 // varListChildrenForCpp 获取C++变量的子成员列表
 // 根据变量类型选择不同的处理方法
-func (c *CPPDebugger) varListChildrenForCpp(ref *gdb_debugger.ReferenceStruct, targetVariable *dap.Variable) ([]dap.Variable, error) {
+func (c *CPPDebugger) varListChildrenForCpp(ref *ReferenceStruct, targetVariable *dap.Variable) ([]dap.Variable, error) {
 	if c.checkIsCppArrayType(targetVariable) {
 		return c.varListChildrenForCppArray(ref, targetVariable)
 	}
@@ -295,7 +270,7 @@ func (c *CPPDebugger) varListChildrenForCpp(ref *gdb_debugger.ReferenceStruct, t
 
 // varListChildrenForCppStruct 获取结构体的成员变量
 // 使用data-evaluate-expression获取结构体内容，避免访问修饰符问题
-func (c *CPPDebugger) varListChildrenForCppStruct(ref *gdb_debugger.ReferenceStruct) ([]dap.Variable, error) {
+func (c *CPPDebugger) varListChildrenForCppStruct(ref *ReferenceStruct) ([]dap.Variable, error) {
 	exp := c.GetExport(ref)
 	_, _ = c.gdbDebugger.GDB.SendWithTimeout(OptionTimeout, "enable-pretty-printing")
 
@@ -329,7 +304,7 @@ func (c *CPPDebugger) varListChildrenForCppStruct(ref *gdb_debugger.ReferenceStr
 
 // varListChildrenForCppArray 获取数组的元素
 // 支持std::array、C数组、std::vector等类型
-func (c *CPPDebugger) varListChildrenForCppArray(ref *gdb_debugger.ReferenceStruct, targetVariable *dap.Variable) ([]dap.Variable, error) {
+func (c *CPPDebugger) varListChildrenForCppArray(ref *ReferenceStruct, targetVariable *dap.Variable) ([]dap.Variable, error) {
 	arrayLength := c.getArrayLength(ref, targetVariable)
 	if arrayLength == 0 {
 		return nil, nil
@@ -357,7 +332,7 @@ func (c *CPPDebugger) varListChildrenForCppArray(ref *gdb_debugger.ReferenceStru
 
 // getArrayLength 获取数组长度
 // 支持多种数组类型：std::array、C数组、std::vector
-func (c *CPPDebugger) getArrayLength(ref *gdb_debugger.ReferenceStruct, targetVariable *dap.Variable) int {
+func (c *CPPDebugger) getArrayLength(ref *ReferenceStruct, targetVariable *dap.Variable) int {
 	// 尝试从std::array获取长度
 	if length := c.extractStdArrayLength(targetVariable.Type); length > 0 {
 		return length
@@ -404,7 +379,7 @@ func (c *CPPDebugger) extractCArrayLength(typeStr string) int {
 
 // getVectorLength 获取std::vector的长度
 // 优先使用size()方法，失败时使用sizeof计算
-func (c *CPPDebugger) getVectorLength(ref *gdb_debugger.ReferenceStruct, targetVariable *dap.Variable) int {
+func (c *CPPDebugger) getVectorLength(ref *ReferenceStruct, targetVariable *dap.Variable) int {
 	exp := c.gdbDebugger.GetExport(ref)
 
 	// 方法1：通过size()获取长度
@@ -547,7 +522,7 @@ func (c *CPPDebugger) getSmartPointerExpression(varName, fieldPath, smartPtrType
 
 // GetExport 通过ReferenceStruct获取变量表达式
 // 用于构建GDB命令中的变量访问表达式
-func (c *CPPDebugger) GetExport(ref *gdb_debugger.ReferenceStruct) string {
+func (c *CPPDebugger) GetExport(ref *ReferenceStruct) string {
 	var exp string
 	switch ref.Type {
 	case "v": // 变量类型

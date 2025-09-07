@@ -246,7 +246,7 @@ func (g *GDBOutputUtil) ParseVariablesOutput(m map[string]interface{}) []dap.Var
 	return answer
 }
 
-// ParseBreakpointHitEventOutput 解析stopped事件中，停留在断点的event输出
+// ParseStoppedEventOutput 解析stopped事件中，停留在断点的event输出
 // reason->breakpoint-hit
 // disp->keep
 // bkptno->1
@@ -290,7 +290,9 @@ func (g *GDBOutputUtil) ParseStoppedEventOutput(m interface{}) *StoppedOutput {
 			reason: constants.ExitedNormally,
 		}
 	} else {
-		return nil
+		return &StoppedOutput{
+			reason: constants.Unknown,
+		}
 	}
 }
 
@@ -326,7 +328,7 @@ type StoppedOutput struct {
 	line   int
 }
 
-// convertVariableName 解析变量名称
+// ConvertVariableName 解析变量名称
 // 由于某些结构体或者指针返回的名称不太美观，所以在这里进行一个转换
 // 比如获取一个结构体的属性，属性名：localItem.id  ->  id
 // 解引用情况：dynamicInt.*(int *)0x555555602260 -> *dynamicInt
@@ -345,7 +347,7 @@ func (g *GDBOutputUtil) ConvertVariableName(variableName string) string {
 	return variableName[index+1:]
 }
 
-// isShouldBeFilterAddress gdb在读取一些变量的时候，会读取到一些初始的数据，需要过滤掉这些数据
+// IsShouldBeFilterAddress gdb在读取一些变量的时候，会读取到一些初始的数据，需要过滤掉这些数据
 func (g *GDBOutputUtil) IsShouldBeFilterAddress(address string) bool {
 	if strings.HasSuffix(address, "<_start>") {
 		return true
@@ -438,7 +440,7 @@ func (g *GDBOutputUtil) CheckKeyFromMap(m interface{}, key string) bool {
 	return exist
 }
 
-func (g *GDBOutputUtil) GetPayloadFromMap (m map[string]any) (any, bool) {
+func (g *GDBOutputUtil) GetPayloadFromMap(m map[string]any) (any, bool) {
 	if class := g.GetStringFromMap(m, "class"); class == "done" {
 		if payload, ok := m["payload"]; ok {
 			return payload, true

@@ -63,6 +63,7 @@ const (
 	BreakpointStopped StoppedReasonType = "breakpoint"
 	StepStopped       StoppedReasonType = "step"
 	ExitedNormally    StoppedReasonType = "exited-normally"
+	Unknown           StoppedReasonType = "unknown"
 )
 
 // StepType 单步调试类型

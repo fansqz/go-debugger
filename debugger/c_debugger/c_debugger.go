@@ -8,32 +8,26 @@ import (
 	"path"
 	"regexp"
 	"strconv"
-	"time"
 
 	"github.com/fansqz/go-debugger/constants"
 	. "github.com/fansqz/go-debugger/debugger"
-	"github.com/fansqz/go-debugger/debugger/gdb_debugger"
+	. "github.com/fansqz/go-debugger/debugger/gdb_debugger"
 	"github.com/fansqz/go-debugger/debugger/gdb_debugger/gdb"
 	"github.com/fansqz/go-debugger/debugger/utils"
 	"github.com/google/go-dap"
-	"github.com/smacker/go-tree-sitter/javascript"
-)
-
-const (
-	OptionTimeout = time.Second * 10
 )
 
 type CDebugger struct {
 	// 因为都是gdb调试器，所以使用c调试器即可
-	gdbDebugger   *gdb_debugger.GDBDebugger
-	gdbOutputUtil *gdb_debugger.GDBOutputUtil
+	gdbDebugger   *GDBDebugger
+	gdbOutputUtil *GDBOutputUtil
 	statusManager *utils.StatusManager
-	referenceUtil *gdb_debugger.ReferenceUtil
+	referenceUtil *ReferenceUtil
 	gdb           *gdb.Gdb
 }
 
 func NewCDebugger() *CDebugger {
-	gdbDebugger := gdb_debugger.NewGDBDebugger(constants.LanguageC)
+	gdbDebugger := NewGDBDebugger(constants.LanguageC)
 	d := &CDebugger{
 		gdbDebugger:   gdbDebugger,
 		gdbOutputUtil: gdbDebugger.GdbOutputUtil,
@@ -55,7 +49,6 @@ func (c *CDebugger) Run() error {
 }
 
 func (c *CDebugger) StepOver() error {
-	javascript.GetLanguage()
 	return c.gdbDebugger.StepOver()
 }
 
@@ -112,23 +105,22 @@ func (c *CDebugger) getLocalScopeVariables(reference int) ([]dap.Variable, error
 	frameId := c.referenceUtil.GetFrameIDByLocalReference(reference)
 	var answer []dap.Variable
 	for _, variable := range variables {
-		// 结构体类型，如果value为空说明是结构体类型
+		// 结构体类型，设置结构体引用
 		if !c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
-			// 如果parentRef不为空，说明是栈帧中的某个结构体变量
-			variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-				&gdb_debugger.ReferenceStruct{Type: "v", FrameId: strconv.Itoa(frameId), VariableName: variable.Name, VariableType: variable.Type})
-		}
-		// 指针类型，如果有值，但是children又不为0说明是指针类型
-		if c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
-			if variable.Type != "char *" {
-				if c.gdbOutputUtil.IsShouldBeFilterAddress(variable.Value) {
-					continue
-				}
-				address := c.gdbOutputUtil.ConvertValueToAddress(variable.Value)
-				variable.Value = address
-				if !c.gdbOutputUtil.IsNullPoint(address) {
-					variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-						&gdb_debugger.ReferenceStruct{Type: "p", VariableType: variable.Type, Address: address, VariableName: variable.Name})
+			variable.VariablesReference, err = c.referenceUtil.CreateVariableReference(NewStructReferenceStruct(strconv.Itoa(frameId), variable.Name, variable.Type))
+			if err != nil {
+				return nil, err
+			}
+		} else if c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 && variable.Type != "char *" {
+			if c.gdbOutputUtil.IsShouldBeFilterAddress(variable.Value) {
+				continue
+			}
+			address := c.gdbOutputUtil.ConvertValueToAddress(variable.Value)
+			variable.Value = address
+			if !c.gdbOutputUtil.IsNullPoint(address) {
+				variable.VariablesReference, err = c.referenceUtil.CreateVariableReference(NewPointReferenceStruct(variable.Type, address))
+				if err != nil {
+					return nil, err
 				}
 			}
 		}
@@ -152,27 +144,27 @@ func (c *CDebugger) getGlobalScopeVariables() ([]dap.Variable, error) {
 	var answer []dap.Variable
 	// 遍历所有的answer
 	for _, variable := range variables {
-		// 结构体类型，如果value为空说明是结构体类型
+		// 结构体类型，创建结构体引用
 		if !c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
-			// 如果parentRef不为空，说明是栈帧中的某个结构体变量
-			variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-				&gdb_debugger.ReferenceStruct{Type: "v", FrameId: "0", VariableName: variable.Name, VariableType: variable.Type})
+			variable.VariablesReference, err = c.referenceUtil.CreateVariableReference(NewStructReferenceStruct("0", variable.Name, variable.Type))
+			if err != nil {
+				return nil, err
+			}
 			variable.Value = ""
-		}
-		// 指针类型，如果有值，但是children又不为0说明是指针类型
-		if c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
-			if variable.Type != "char *" {
-				if c.gdbOutputUtil.IsShouldBeFilterAddress(variable.Value) {
-					continue
-				}
-				address := c.gdbOutputUtil.ConvertValueToAddress(variable.Value)
-				variable.Value = address
-				if !c.gdbOutputUtil.IsNullPoint(address) {
-					variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-						&gdb_debugger.ReferenceStruct{Type: "p", VariableType: variable.Type, Address: address, VariableName: variable.Name})
+		} else if c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 && variable.Type != "char *" {
+			if c.gdbOutputUtil.IsShouldBeFilterAddress(variable.Value) {
+				continue
+			}
+			address := c.gdbOutputUtil.ConvertValueToAddress(variable.Value)
+			variable.Value = address
+			if !c.gdbOutputUtil.IsNullPoint(address) {
+				variable.VariablesReference, err = c.referenceUtil.CreateVariableReference(NewPointReferenceStruct(variable.Type, address))
+				if err != nil {
+					return nil, err
 				}
 			}
 		}
+
 		// 如果是数组类型，设置value为数组的首地址
 		addr, err := c.checkAndSetArrayAddress(variable)
 		if err != nil {
@@ -186,6 +178,9 @@ func (c *CDebugger) getGlobalScopeVariables() ([]dap.Variable, error) {
 }
 
 func (c *CDebugger) checkAndSetArrayAddress(variable dap.Variable) (string, error) {
+	if c.gdb == nil {
+		return "", errors.New("gdb instance not initialized")
+	}
 	pattern := `\w+\s*\[\d*\]`
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -208,16 +203,23 @@ func (c *CDebugger) checkAndSetArrayAddress(variable dap.Variable) (string, erro
 func (c *CDebugger) getVariables(reference int) ([]dap.Variable, error) {
 	variables, err := c.gdbDebugger.GetVariables(reference)
 	if err != nil {
+		log.Printf("getVariables failed: %v\n", err)
 		return nil, err
 	}
 	refStruct, err := c.referenceUtil.ParseVariableReference(reference)
+	if err != nil {
+		log.Printf("parseVariableReference failed: %v\n", err)
+		return nil, err
+	}
 	// 解析c语言结构体，并二次处理
 	answer := make([]dap.Variable, 0, 10)
 	for _, variable := range variables {
 		// 如果value不为指针，且chidren不为0说明是结构体类型
 		if !c.gdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
-			// 已经定位了的结构体下的某个属性，直接加路径即可。
-			variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(gdb_debugger.GetFieldReferenceStruct(refStruct, variable.Name))
+			variable.VariablesReference, err = c.referenceUtil.CreateVariableReference(GetFieldReferenceStruct(refStruct, variable.Name))
+			if err != nil {
+				return nil, err
+			}
 		}
 		// value指针且chidren不为0说明是指针类型
 		if c.gdbDebugger.GdbOutputUtil.CheckIsAddress(variable.Value) && variable.IndexedVariables != 0 {
@@ -228,8 +230,10 @@ func (c *CDebugger) getVariables(reference int) ([]dap.Variable, error) {
 				address := c.gdbOutputUtil.ConvertValueToAddress(variable.Value)
 				variable.Value = address
 				if !c.gdbOutputUtil.IsNullPoint(address) {
-					variable.VariablesReference, _ = c.referenceUtil.CreateVariableReference(
-						&gdb_debugger.ReferenceStruct{Type: "p", VariableType: variable.Type, Address: address, VariableName: variable.Name})
+					variable.VariablesReference, err = c.referenceUtil.CreateVariableReference(NewPointReferenceStruct(variable.Type, address))
+					if err != nil {
+						return nil, err
+					}
 				}
 			}
 		}

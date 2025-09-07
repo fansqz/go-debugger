@@ -3,6 +3,7 @@ package gdb_debugger
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"sync"
 )
@@ -18,7 +19,7 @@ const (
 	PointType  ReferenceType = "p"
 )
 
-// ReferenceUtil 在
+// ReferenceUtil 引用工具类
 type ReferenceUtil struct {
 	nextRef       int
 	mutex         sync.RWMutex
@@ -34,6 +35,25 @@ type ReferenceStruct struct {
 	VariableType string
 	Address      string
 	FieldPath    string
+}
+
+// NewPointReferenceStruct 创建指针引用结构体
+func NewPointReferenceStruct(variableType string, address string) *ReferenceStruct {
+	return &ReferenceStruct{
+		Type:         PointType,
+		VariableType: variableType,
+		Address:      address,
+	}
+}
+
+// NewStructReferenceStruct 创建结构体引用结构体
+func NewStructReferenceStruct(frameId string, variableName string, variableType string) *ReferenceStruct {
+	return &ReferenceStruct{
+		Type:         StructType,
+		FrameId:      frameId,
+		VariableName: variableName,
+		VariableType: variableType,
+	}
 }
 
 func NewReferenceUtil() *ReferenceUtil {
@@ -86,11 +106,11 @@ func (r *ReferenceUtil) CreateVariableReference(refStruct *ReferenceStruct) (int
 	defer r.mutex.Unlock()
 	strRef, err := r.convertReference(refStruct)
 	if err != nil {
+		log.Printf("Error converting reference %v to struct: %v", refStruct, err)
 		return 0, err
 	}
 	// 如果引用已经存在，直接返回
-	_, ok := r.refStruct2Int[strRef]
-	if ok {
+	if _, ok := r.refStruct2Int[strRef]; ok {
 		return r.refStruct2Int[strRef], nil
 	}
 	// 创建引用
